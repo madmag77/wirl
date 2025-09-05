@@ -1,0 +1,47 @@
+[project]
+name = "wirl-lang"
+version = "0.1.0"
+description = "WIRL workflow DSL grammar and parser"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Artem Goncharov" }
+]
+license = { text = "MIT" }
+dependencies = [
+  "lark>=1.1.9",
+]
+
+[project.urls]
+Repository = "https://github.com/wirl/packages/wirl-lang"
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["wirl_lang*"]
+
+[tool.setuptools.package-dir]
+wirl_lang = "grammar"
+
+[tool.setuptools.package-data]
+wirl_lang = ["wirl.bnf"]
+
+[tool.ruff]
+line-length = 200
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+

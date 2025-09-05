@@ -1,0 +1,57 @@
+?start: workflow
+
+workflow: "workflow" NAME "{" workflow_body "}"
+workflow_body: (metadata_block | inputs_block | outputs_block | node_block | cycle_block)*
+
+metadata_block: "metadata" "{" metadata_entry* "}"
+metadata_entry: NAME ":" STRING
+
+inputs_block: "inputs" "{" param_decl* "}"
+outputs_block: "outputs" "{" output_param_decl* "}"
+reducer_decl: "(" REDUCER ")"
+default_value: "=" param_value
+output_param_decl: reducer_decl? TYPE NAME default_value? QUESTION?
+param_decl: TYPE NAME ("=" param_value)? QUESTION?
+param_value: NAME_WITH_DOT | literal
+
+node_block: "node" NAME "{" node_body "}"
+node_body: call_stmt node_element*
+node_element: inputs_block
+            | outputs_block
+            | constants_block
+            | when_clause
+            | retry_block
+            | hitl_block
+
+call_stmt: "call" NAME_WITH_DOT
+
+constants_block: "const" "{" const_entry* "}"
+const_entry: NAME ":" literal
+
+when_clause: "when" "{" expr "}"
+
+hitl_block: "hitl" "{" "correlation:" STRING "," "timeout:" DURATION "}"
+
+retry_block: "retry" "{" "attempts:" INT "," "backoff:" NAME "," "policy:" NAME "}"
+
+cycle_block: "cycle" NAME "{" cycle_body "}"
+cycle_body: inputs_block outputs_block node_block* guard_clause "max_iterations:" INT
+
+guard_clause: "guard" "{" guard_body "}"
+guard_body: inputs_block when_clause
+
+REDUCER: "last" | "append"
+TYPE: /[A-Za-z][A-Za-z0-9_<>,]*/
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
+NAME_WITH_DOT: /[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)?/
+DURATION: /[0-9]+[smhd]/
+INT: /[0-9]+/
+STRING: /"[^"]*"/
+BOOL: "false" | "true"
+QUESTION: "?"
+
+literal: STRING | INT | NAME | BOOL
+expr: /[^}\n]+/
+
+%ignore /\s+/
+%ignore /#[^\n]*/

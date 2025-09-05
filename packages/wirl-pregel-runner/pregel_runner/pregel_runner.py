@@ -1,0 +1,63 @@
+# Runner for Wirl workflows
+
+from __future__ import annotations
+import json
+import re
+from typing import Any, Dict, List, Set
+import argparse
+from langgraph.types import Command
+from pregel_runner.pregel_graph_builder import build_pregel_graph
+
+def run_workflow(workflow_path: str,
+                 fn_map=None,
+                 params: Dict[str, Any] | None = None,
+                 thread_id: str | None = None,
+                 resume: str | None = None,
+                 checkpointer: Any | None = None,
+                 debug: bool = False):
+    app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer, debug=debug)
+    config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
+    if resume:
+        resume_val = json.loads(resume)
+        result = app.invoke(Command(resume=resume_val), config)
+    else:
+        result = app.invoke(params or {}, config)
+    return result
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run an Wirl workflow.")
+    parser.add_argument("workflow_path", type=str, help="Path to the workflow file")
+    parser.add_argument("--functions", type=str, default="steps.deepresearch_functions",
+                        help="Python module containing the workflow functions")
+    parser.add_argument("--param", action="append", default=[],
+                        help="Workflow input parameter key=value")
+    parser.add_argument("--thread-id", type=str, default="cli")
+    parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--debug", action="store_true", 
+                        help="Print debug information including dependency graph")
+    args = parser.parse_args()
+
+    mod = __import__(args.functions, fromlist=["*"])
+    fn_map = {k: getattr(mod, k) for k in dir(mod) if not k.startswith("_")}
+
+    def parse_params(param_list: List[str]):
+        out = {}
+        for p in param_list:
+            if "=" not in p:
+                raise ValueError(f"Invalid param: {p}")
+            k, v = p.split("=", 1)
+            if v.isdigit():
+                v = int(v)
+            else:
+                try:
+                    v = float(v)
+                except ValueError:
+                    pass
+            out[k] = v
+        return out
+
+    params = parse_params(args.param)
+    result = run_workflow(args.workflow_path, fn_map, params, args.thread_id, args.resume, debug=args.debug)
+
+

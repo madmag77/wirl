@@ -1,0 +1,50 @@
+[project]
+name = "wirl-pregel-runner"
+version = "0.1.0"
+description = "Pregel-based runner for WIRL workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Artem Goncharov" }
+]
+license = { text = "MIT" }
+dependencies = [
+  "wirl-lang>=0.1.0",
+  "langgraph>=0.2.0",
+]
+
+[project.urls]
+Repository = "https://github.com/wirl/packages/wirl-pregel-runner"
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.5.0",
+  "pytest>=7",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pregel_runner*", "wirl*"]
+
+[tool.setuptools.package-dir]
+wirl = "wirl"
+
+[tool.ruff]
+line-length = 200
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.uv.sources]
+wirl-lang = { path = "../wirl-lang" }
+
+

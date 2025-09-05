@@ -1,0 +1,74 @@
+workflow SampleRAGWorkflow {
+
+  metadata {
+    description: "Sample RAG workflow"
+    owner: "sample_team"
+    version: "1.0"
+  }
+
+  inputs {
+    String query
+  }
+
+  outputs {
+    String final_answer = FinalAnswer.final_answer
+  }
+
+  node QueryExtender {
+    call query_extender
+    inputs {
+      String query = query
+    }
+    outputs {
+      String extended_query
+    }
+  }
+
+  node Retrieve {
+    call retrieve_from_web
+    inputs {
+      String extended_query = QueryExtender.extended_query
+    }
+    outputs {
+      List<Chunk> chunks
+      Bool need_filtering
+    }
+  }
+
+  node FilterChunks {
+    call filter_chunks
+    inputs {
+      String query       = query
+      Bool need_filtering = Retrieve.need_filtering
+      List<Chunk> chunks = Retrieve.chunks
+    }
+    when {
+      Retrieve.need_filtering
+    }    
+    const {
+      llm_model: "gpt-4o"
+    }
+    outputs {
+      List<Chunk> filtered_chunks
+      String filtered_chunks_summary?
+    }
+  }
+
+  node FinalAnswer {
+    call final_answer_generation
+    inputs {
+      String query        = query
+      String extended_query = QueryExtender.extended_query
+      Bool need_filtering = Retrieve.need_filtering
+      List<Chunk> chunks = FilterChunks.filtered_chunks?
+      List<Chunk> chunks = Retrieve.chunks?
+      String filtered_chunks_summary = FilterChunks.filtered_chunks_summary?
+    }
+    when {
+      Retrieve.need_filtering and FilterChunks.filtered_chunks or not Retrieve.need_filtering
+    }
+    outputs {
+      String final_answer
+    }
+  }
+}
