@@ -1,0 +1,122 @@
+workflow PaperRenameWorkflow {
+
+  metadata {
+    description: "Paper Rename workflow"
+    owner: "madmag77"
+    version: "1.0"
+    files_extension: "pdf"
+  }
+
+  inputs {
+    String drafts_folder_path
+    String processed_folder_path
+  }
+
+  outputs {
+    List<String> processed_files = ReturnProcessedFiles.processed_files
+  }
+
+  node GetFiles {
+    call get_files
+    inputs {
+      String drafts_folder_path = drafts_folder_path
+    }
+    outputs {
+      List<String> file_paths
+    }
+  }
+
+  cycle RenameLoop {
+    inputs {
+        List<String> initial_file_paths_to_process = GetFiles.file_paths
+        List<String> remaining_file_paths_to_process = ReadPdfFile.remaining_file_paths
+        String processed_folder_path = processed_folder_path
+    }
+    outputs {
+        List<String> processed_files = CheckAllFilesProcessed.processed_files
+    }
+
+    node ReadPdfFile {
+        call read_pdf_file
+        inputs {
+           List<String> file_paths = RenameLoop.remaining_file_paths_to_process?
+           List<String> initial_file_paths_to_process = RenameLoop.initial_file_paths_to_process
+        }
+        const {
+            pages_to_read: 2
+        }
+        outputs {
+           List<T<Image>> pages
+           String file_path
+           List<String> remaining_file_paths
+           Bool no_files_to_process
+        }
+    }
+
+    node ExtractMetadata {
+        call extract_metadata
+        inputs {
+           List<T<Image>> pages = ReadPdfFile.pages
+        }
+        const {
+            model: "gemma3:12b"
+            base_url: "http://localhost:11434/v1/"
+            temperature: 0
+        }
+        outputs {
+           String title
+           List<String> authors
+           String year
+        }
+    }
+    
+    node RenameFile {
+        call rename_file
+        inputs {
+           String file_path = ReadPdfFile.file_path
+           String title = ExtractMetadata.title
+           List<String> authors = ExtractMetadata.authors
+           String year = ExtractMetadata.year
+           String processed_folder_path = RenameLoop.processed_folder_path
+        }
+        outputs {
+           String new_file_path
+        }
+    }
+
+    node CheckAllFilesProcessed {
+        call check_all_files_processed
+        inputs {
+           List<String> remaining_file_paths_to_process = ReadPdfFile.remaining_file_paths?
+           String processed_file = RenameFile.new_file_path?
+           Bool no_files_to_process = ReadPdfFile.no_files_to_process?
+        }
+        when {
+           ReadPdfFile.no_files_to_process or RenameFile.new_file_path
+        }
+        outputs {
+           Bool is_done
+           (append) List<String> processed_files
+        }
+    }
+    guard {
+      inputs {
+        Bool is_done = CheckAllFilesProcessed.is_done
+      }
+      when {
+        CheckAllFilesProcessed.is_done
+      }
+    }
+    max_iterations: 10
+  }
+
+  node ReturnProcessedFiles {
+    call return_processed_files
+    inputs {
+      List<String> processed_files = RenameLoop.processed_files
+    }
+    outputs {
+      List<String> processed_files
+    }
+  }
+}
