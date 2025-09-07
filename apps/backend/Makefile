@@ -1,5 +1,10 @@
 .PHONY: install install-dev lint lint_diff format format_diff run test test_cov
 
+# Virtual environment setup
+ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDIR)/../..)
+VENV := $(ROOT)/.venv
+PY := $(VENV)/bin/python
+
 # Files selection
 PYTHON_FILES=.
 
@@ -12,25 +17,25 @@ HOST?=0.0.0.0
 PORT?=8008
 
 install:
-	uv pip install -e .
+	uv pip install --python $(PY) -e .
 
 install-dev:
-	uv pip install -e . --group dev
+	uv pip install --python $(PY) -e . --group dev
 
 lint lint_diff:
-	uv run ruff check $(PYTHON_FILES)
+	$(PY) -m ruff check $(PYTHON_FILES)
 
 format format_diff:
-	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	$(PY) -m ruff format $(PYTHON_FILES)
+	$(PY) -m ruff check --select I --fix $(PYTHON_FILES)
 
 run:
-	uv run uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
+	$(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
 
 test:
-	python -m pytest -q tests
+	$(PY) -m pytest -q tests
 
 test_cov:
-	python -m pytest -q tests --cov=backend --cov-report=term-missing
+	$(PY) -m pytest -q tests --cov=backend --cov-report=term-missing
 
 

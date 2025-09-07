@@ -1,5 +1,10 @@
 .PHONY: install install-dev lint lint_diff format format_diff
 
+# Virtual environment setup
+ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDIR)/../..)
+VENV := $(ROOT)/.venv
+PY := $(VENV)/bin/python
+
 # Files selection
 PYTHON_FILES=.
 
@@ -8,15 +13,15 @@ lint format: PYTHON_FILES=.
 lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E '\.py$$|\.ipynb$$')
 
 install:
-	uv pip install -e .
+	uv pip install --python $(PY) -e .
 
 install-dev:
-	uv pip install -e '.[dev]'
+	uv pip install --python $(PY) -e '.[dev]'
 
 lint lint_diff:
-	uv run ruff check $(PYTHON_FILES)
+	$(PY) -m ruff check $(PYTHON_FILES)
 
 format format_diff:
-	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	$(PY) -m ruff format $(PYTHON_FILES)
+	$(PY) -m ruff check --select I --fix $(PYTHON_FILES)
 
