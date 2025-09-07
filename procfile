@@ -1,0 +1,4 @@
+postgres: sh -c 'container system start; container ls --format table | grep "awsl-postgres" || container start awsl-postgres; sleep 5 && container logs -f awsl-postgres'
+backend: sh -c "sleep 6 && cd apps/backend && make run HOST=0.0.0.0 PORT=8000"
+workers: sh -c "sleep 8 && cd apps/workers && make run"
+frontend: sh -c "cd apps/frontend && make run PORT=3000"
