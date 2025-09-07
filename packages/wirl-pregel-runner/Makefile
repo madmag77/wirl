@@ -11,7 +11,7 @@ install:
 	uv pip install -e .
 
 install-dev:
-	uv pip install -e '.[dev]'
+	uv pip install -e . --group dev
 
 lint lint_diff:
 	uv run ruff check $(PYTHON_FILES)

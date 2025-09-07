@@ -16,22 +16,18 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/wirl/packages/wirl-pregel-runner"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "ruff>=0.5.0",
   "pytest>=7",
 ]
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["pregel_runner*", "wirl*"]
-
-[tool.setuptools.package-dir]
-wirl = "wirl"
+[tool.hatch.build.targets.wheel]
+packages = ["wirl_pregel_runner"]
 
 [tool.ruff]
 line-length = 200
@@ -45,6 +41,10 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.uv.sources]
-wirl-lang = { path = "../wirl-lang" }
+# Configure local editable source for neighbor package during development
+wirl-lang = { path = "../wirl-lang", editable = true }
+
+[tool.uv]
+default-groups = ['dev']
 
 

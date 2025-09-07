@@ -1,6 +1,6 @@
-from wirl.run_wirl_workflow import run_workflow
+from wirl_pregel_runner import run_workflow
 
-WIRL_PATH = "wirls/sample.wirl"
+WIRL_PATH = "tests/wirls/sample.wirl"
 
 
 def query_extender(query: str, config: dict) -> dict:

@@ -1,6 +1,6 @@
-from wirl.run_wirl_workflow import run_workflow
+from wirl_pregel_runner import run_workflow
 
-WIRL_PATH = "wirls/sample_with_cycle.wirl"
+WIRL_PATH = "tests/wirls/sample_with_cycle.wirl"
 
 def query_extender(query: str, add_query_aspect: str, config: dict) -> dict:
     return {"extended_query": "extended query"}

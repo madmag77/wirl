@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Set
 import argparse
 from langgraph.types import Command
-from pregel_runner.pregel_graph_builder import build_pregel_graph
+from wirl_pregel_runner.pregel_graph_builder import build_pregel_graph
 
 def run_workflow(workflow_path: str,
                  fn_map=None,
@@ -14,8 +14,8 @@ def run_workflow(workflow_path: str,
                  thread_id: str | None = None,
                  resume: str | None = None,
                  checkpointer: Any | None = None,
-                 debug: bool = False):
-    app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer, debug=debug)
+                 ):
+    app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer)
     config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
     if resume:
         resume_val = json.loads(resume)
@@ -34,8 +34,6 @@ if __name__ == "__main__":
                         help="Workflow input parameter key=value")
     parser.add_argument("--thread-id", type=str, default="cli")
     parser.add_argument("--resume", type=str, default=None)
-    parser.add_argument("--debug", action="store_true", 
-                        help="Print debug information including dependency graph")
     args = parser.parse_args()
 
     mod = __import__(args.functions, fromlist=["*"])
@@ -58,6 +56,6 @@ if __name__ == "__main__":
         return out
 
     params = parse_params(args.param)
-    result = run_workflow(args.workflow_path, fn_map, params, args.thread_id, args.resume, debug=args.debug)
+    result = run_workflow(args.workflow_path, fn_map, params, args.thread_id, args.resume)
 
 
