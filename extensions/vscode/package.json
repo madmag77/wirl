@@ -1,0 +1,35 @@
+{
+  "name": "wirl-syntax",
+  "displayName": "Wirl Syntax Highlighting",
+  "description": "Minimal syntax highlighting for Wirl files",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "wirl",
+        "aliases": [
+          "Wirl",
+          "wirl"
+        ],
+        "extensions": [
+          ".wirl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wirl",
+        "scopeName": "source.wirl",
+        "path": "./syntaxes/wirl.tmLanguage.json"
+      }
+    ]
+  }
+}

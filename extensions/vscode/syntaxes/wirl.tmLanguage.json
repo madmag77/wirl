@@ -1,0 +1,41 @@
+{
+  "scopeName": "source.wirl",
+  "patterns": [
+    {
+      "match": "\\b(workflow|metadata|inputs|outputs|node|call|const|when|retry|backoff|policy|hitl|cycle|guard|max_iterations|attempts|correlation|timeout)\\b",
+      "name": "keyword.control.wirl"
+    },
+    {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.boolean.wirl"
+    },
+    {
+      "match": "\\b[0-9]+[smhd]\\b",
+      "name": "constant.other.duration.wirl"
+    },
+    {
+      "match": "\\b(String|Int|Bool|List|Dict|Any)\\b",
+      "name": "storage.type.primitive.wirl"
+    },
+    {
+      "match": "\\b[A-Z][A-Za-z0-9_<>,]*\\b",
+      "name": "storage.type.wirl"
+    },
+    {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z0-9_]+\\b",
+      "name": "variable.other.property.wirl"
+    },
+    {
+      "match": "\"(?:[^\"\\\\]|\\\\.)*\"",
+      "name": "string.quoted.double.wirl"
+    },
+    {
+      "match": "\\b\\d+(?:\\.\\d+)?\\b",
+      "name": "constant.numeric.wirl"
+    },
+    {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.wirl"
+    }
+  ]
+}
