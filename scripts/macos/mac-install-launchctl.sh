@@ -94,7 +94,7 @@ generate_plist() {
         -e "s|{PATH TO REPO}|$REPO_ROOT|g" \
         -e "s|{PATH TO HOME FOLDER}|$HOME|g" \
         -e "s|/opt/homebrew/bin/overmind|$OVERMIND_PATH|g" \
-        -e "s|/Users/artemgoncharov/bpmn-workflows|$REPO_ROOT|g" \
+        -e "s|/Users/username/wirl|$REPO_ROOT|g" \
         "$PLIST_TEMPLATE" > "$PLIST_FILE"
     
     # Create log directory
@@ -148,8 +148,8 @@ verify_installation() {
     fi
     
     # Check log files
-    LOG_OUT="$HOME/.local/log/bpmn-workflows-overmind.out"
-    LOG_ERR="$HOME/.local/log/bpmn-workflows-overmind.err"
+    LOG_OUT="$HOME/.local/log/wirl-workflows-overmind.out"
+    LOG_ERR="$HOME/.local/log/wirl-workflows-overmind.err"
     
     if [ -f "$LOG_OUT" ]; then
         print_status "Output log: $LOG_OUT"
@@ -177,8 +177,8 @@ show_debug_info() {
     echo ""
     print_status "To debug issues:"
     echo "  1. Check service status: launchctl list | grep $SERVICE_NAME"
-    echo "  2. View logs: tail -f $HOME/.local/log/bpmn-workflows-overmind.out"
-    echo "  3. View errors: tail -f $HOME/.local/log/bpmn-workflows-overmind.err"
+    echo "  2. View logs: tail -f $HOME/.local/log/wirl-workflows-overmind.out"
+    echo "  3. View errors: tail -f $HOME/.local/log/wirl-workflows-overmind.err"
     echo "  4. Restart service: launchctl unload '$PLIST_FILE' && launchctl load '$PLIST_FILE'"
     echo "  5. Check overmind manually: cd '$REPO_ROOT' && overmind start"
 }

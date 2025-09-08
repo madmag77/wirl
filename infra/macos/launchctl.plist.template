@@ -19,7 +19,7 @@
     <string>{USERNAME}</string>
     
     <key>WorkingDirectory</key>
-    <string>/Users/artemgoncharov/bpmn-workflows</string>
+    <string>/{PATH TO REPO}/</string>
     
     <key>EnvironmentVariables</key>
     <dict>
@@ -34,10 +34,10 @@
     <true/>
     
     <key>StandardOutPath</key>
-    <string>{PATH TO HOME FOLDER}/.local/log/bpmn-workflows-overmind.out</string>
+    <string>{PATH TO HOME FOLDER}/.local/log/wirl-workflows-overmind.out</string>
     
     <key>StandardErrorPath</key>
-    <string>{PATH TO HOME FOLDER}.local/log/bpmn-workflows-overmind.err</string>
+    <string>{PATH TO HOME FOLDER}.local/log/wirl-workflows-overmind.err</string>
     
     <key>ProcessType</key>
     <string>Interactive</string>

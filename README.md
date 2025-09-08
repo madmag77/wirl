@@ -118,7 +118,7 @@ This script will:
 launchctl list | grep com.local.wirl.overmind
 
 # View logs
-tail -f ~/.local/log/bpmn-workflows-overmind.out
+tail -f ~/.local/log/wirl-workflows-overmind.out
 
 # Uninstall service
 ./scripts/macos/mac-install-launchctl.sh --uninstall

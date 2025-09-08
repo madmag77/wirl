@@ -14,7 +14,7 @@ This package contains the grammar and parser for the WIRL workflow DSL. The DSL 
 from wirl_lang import parse_wirl_to_objects
 
 workflow = parse_wirl_to_objects(
-    "workflow_definitions/paper_rename_workflow/paper_rename_workflow.awsl"
+    "workflow_definitions/paper_rename_workflow/paper_rename_workflow.wirl"
 )
 
 print(workflow.name)
@@ -35,7 +35,7 @@ for node in workflow.nodes:
 
 ## Example (excerpt)
 
-This is a shortened excerpt of the working workflow in `workflow_definitions/paper_rename_workflow/paper_rename_workflow.awsl`:
+This is a shortened excerpt of the working workflow in `workflow_definitions/paper_rename_workflow/paper_rename_workflow.wirl`:
 
 ```txt
 workflow PaperRenameWorkflow {

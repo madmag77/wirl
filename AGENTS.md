@@ -108,10 +108,10 @@ ls -la .overmind.sock
 If issues occur:
 ```bash
 # View output logs
-tail -f ~/.local/log/bpmn-workflows-overmind.out
+tail -f ~/.local/log/wirl-workflows-overmind.out
 
 # View error logs  
-tail -f ~/.local/log/bpmn-workflows-overmind.err
+tail -f ~/.local/log/wirl-workflows-overmind.err
 
 # Restart service
 launchctl unload ~/Library/LaunchAgents/com.local.wirl.overmind.plist

@@ -27,9 +27,9 @@ format format_diff:
 
 # Run the pregel runner with a workflow and parameters
 # Usage examples:
-#  make run WORKFLOW=../../workflow_definitions/paper_rename_workflow/paper_rename_workflow.awsl PARAMS="query='foo bar' limit=3" FUNCTIONS=workflow_definitions.paper_rename_workflow.paper_rename_workflow
-#  make run WORKFLOW=../../examples/sample.awsl PARAMS="x=1 y=2"
-WORKFLOW?=../../examples/sample.awsl
+#  make run WORKFLOW=../../workflow_definitions/paper_rename_workflow/paper_rename_workflow.wirl PARAMS="query='foo bar' limit=3" FUNCTIONS=workflow_definitions.paper_rename_workflow.paper_rename_workflow
+#  make run WORKFLOW=../../examples/sample.wirl PARAMS="x=1 y=2"
+WORKFLOW?=../../examples/sample.wirl
 PARAMS?=
 FUNCTIONS?=steps.deepresearch_functions
 THREAD_ID?=cli
