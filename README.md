@@ -79,33 +79,50 @@ workflow_definitions/<workflow_name>/
 - You can pin per-workflow versions without impacting other workflows.
 - Optionally maintain a repo-level `constraints.txt` and pass `-c constraints.txt` if you prefer central pinning.
 
-## macOS local service (optional)
-This repo includes a `Procfile` and a `launchctl` template to help run services under Overmind/launchd.
+## Running on macOS
 
-1) Generate a launchd plist from the template (or use the script)
-- Template: `infra/macos/launchctl.plist.template`
-- Script: `scripts/macos/mac-install-launchctl.sh`
+### Option 1: Manual with Overmind (Development)
+Run all apps locally using overmind and the included `Procfile`:
 
-2) Ensure Overmind is installed
 ```bash
+# Install overmind
 brew install overmind
+
+# Start all services (postgres, backend, workers, frontend)
+overmind start
 ```
 
-3) Run the installation script (may prompt for confirmation)
+Services will run on:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000
+- Postgres: via Docker container
+
+### Option 2: Auto-start Service (Production)
+Install as a macOS LaunchAgent service that starts automatically on boot:
+
 ```bash
+# One-command installation
 chmod +x scripts/macos/mac-install-launchctl.sh
-scripts/macos/mac-install-launchctl.sh
+./scripts/macos/mac-install-launchctl.sh
 ```
 
-4) Check everything is running
-- Overmind: `overmind start` (from repo root; uses `Procfile`)
-- launchd: `launchctl list | grep wirl` and inspect logs via Console.app
+This script will:
+- Install overmind (if missing)
+- Generate plist from template with your system paths
+- Install and load the LaunchAgent service
+- Verify everything is running
 
-5) Debugging tips
-- Review Overmind logs in the terminal; ensure `.env` and required ports are set.
-- For launchd, use `launchctl bootout/bootload` to reload your agent, and inspect the generated plist in `~/Library/LaunchAgents/`.
+**Service Management:**
+```bash
+# Check status
+launchctl list | grep com.local.wirl.overmind
 
-(Back-end, workers, and frontend services will be wired into the Procfile later.)
+# View logs
+tail -f ~/.local/log/bpmn-workflows-overmind.out
+
+# Uninstall service
+./scripts/macos/mac-install-launchctl.sh --uninstall
+```
 
 ## Development
 - DSL and parser: see `packages/wirl-lang/README.md` for API (`parse_wirl_to_objects`) and grammar notes.

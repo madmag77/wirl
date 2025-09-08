@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.local.wirl.overmind</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/overmind</string>
+        <string>start</string>
+        <string>-f</string>
+        <string>procfile</string>
+        <string>-s</string>
+        <string>/{PATH TO REPO}/.overmind.sock</string>
+    </array>
+    
+    <key>UserName</key>
+    <string>{USERNAME}</string>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/artemgoncharov/bpmn-workflows</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>StandardOutPath</key>
+    <string>{PATH TO HOME FOLDER}/.local/log/bpmn-workflows-overmind.out</string>
+    
+    <key>StandardErrorPath</key>
+    <string>{PATH TO HOME FOLDER}.local/log/bpmn-workflows-overmind.err</string>
+    
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    
+    <key>SessionCreate</key>
+    <true/>
+    
+</dict>
+</plist>
