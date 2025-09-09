@@ -1,4 +1,4 @@
-.PHONY: workflows-setup workflows-setup-dev init-venv check-uv install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow
+.PHONY: workflows-setup workflows-setup-dev init-venv check-uv check-overmind install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow run_wirl_apps
 
 ROOT := $(CURDIR)
 VENV := $(ROOT)/.venv
@@ -28,11 +28,17 @@ install-workflow-deps: init-venv
 	  done; \
 	fi
 
-install-backend-deps:
-	@echo "TODO: install backend deps (placeholder)"
+install-backend-deps: init-venv
+	$(MAKE) -C $(ROOT)/apps/backend install
 
-install-worker-deps:
-	@echo "TODO: install worker deps (placeholder)"
+install-worker-deps: init-venv
+	$(MAKE) -C $(ROOT)/apps/workers install
+
+check-overmind:
+	@command -v overmind >/dev/null 2>&1 || { echo "overmind is required: install with 'brew install overmind'"; exit 1; }
+
+run_wirl_apps: check-overmind
+	overmind start -f $(ROOT)/procfile
 
 workflows-setup: install-core install-workflow-deps install-backend-deps install-worker-deps
 	@echo "Workflows environment is ready in $(VENV)"
