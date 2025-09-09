@@ -34,7 +34,6 @@ PARAMS?=
 FUNCTIONS?=steps.deepresearch_functions
 THREAD_ID?=cli
 RESUME?=
-DEBUG?=
 
 run:
 	$(PY) -m pregel_runner.pregel_runner $(WORKFLOW) $(foreach p,$(PARAMS),--param $(p)) --functions $(FUNCTIONS) --thread-id $(THREAD_ID) $(if $(RESUME),--resume '$(RESUME)')

@@ -129,5 +129,53 @@ tail -f ~/.local/log/wirl-workflows-overmind.out
 - Runner: see `packages/wirl-pregel-runner/README.md` for API and CLI usage.
 - VSCode syntax: `extensions/vscode/README.md` for packaging and local install.
 
+## Creating your workflows
+
+1) Create a new workflow folder and three files
+
+```
+workflow_definitions/<workflow_name>/
+  <workflow_name>.wirl            # DSL definition
+  <workflow_name>.py              # Python implementation of functions referenced in the DSL
+  requirements.txt                # Workflow-specific dependencies (only what this workflow needs)
+```
+
+2) Write tests for your workflow
+
+- Place tests under `workflow_definitions/<workflow_name>/tests/`.
+- Start by testing the DSL in isolation using the runner with stubbed functions, mirroring the pattern from `packages/wirl-pregel-runner/tests/test_wirl_with_cycles_runner.py`.
+- Example command (no permanent dependency; uses a transient runner install):
+
+```bash
+uv run --with ./packages/wirl-pregel-runner -- pytest workflow_definitions/<workflow_name>/tests -q
+```
+
+- You can also use the Makefile shortcut from the repo root:
+
+```bash
+make test-workflow WORKFLOW=<workflow_name>  # adds runner transiently and runs pytest
+```
+
+3) Implement and unit-test Python functions
+
+- Implement the functions referenced by `call` statements in `<workflow_name>.py`.
+- Unit-test those Python functions directly (pure pytest) without the runner where it makes sense.
+
+4) Run the workflow end-to-end
+
+- Use the provided Makefile target to run a workflow from its DSL file, pointing to your Python functions module and passing input params:
+
+```bash
+make run-workflow \
+  WORKFLOW=<workflow_name> \
+  FUNCS=workflow_definitions.<workflow_name>.<workflow_name> \
+  PARAMS="key1=value1 key2=value2"
+```
+
+Notes:
+- `WORKFLOW` is the directory name under `workflow_definitions/`.
+- `FUNCS` is the import path to the module exposing the functions used in the `.wirl` file.
+- `PARAMS` is optional; specify space-separated key=value pairs that match your workflow inputs.
+
 ## License
 MIT — see `LICENSE` at the repo root.

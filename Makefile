@@ -1,4 +1,4 @@
-.PHONY: workflows-setup workflows-setup-dev init-venv check-uv install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps
+.PHONY: workflows-setup workflows-setup-dev init-venv check-uv install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow
 
 ROOT := $(CURDIR)
 VENV := $(ROOT)/.venv
@@ -39,3 +39,60 @@ workflows-setup: install-core install-workflow-deps install-backend-deps install
 
 workflows-setup-dev: install-core-dev install-workflow-deps install-backend-deps install-worker-deps
 	@echo "Workflows development environment is ready in $(VENV)"
+
+#
+# Testing workflows
+#
+# Usage examples:
+#   make test-workflow WORKFLOW=paper_rename_workflow             # run one workflow's tests
+#   make test-all-workflows                                       # run all workflow tests
+#   make test-workflow WORKFLOW=paper_rename_workflow PYTEST_ARGS="-q -k mytest"
+
+# Optional: name of workflow directory under workflow_definitions/
+WORKFLOW ?=
+# Optional: extra args to pass to pytest (default: -q)
+PYTEST_ARGS ?= -q
+
+ifeq ($(strip $(WORKFLOW)),)
+TEST_TARGET := $(ROOT)/workflow_definitions
+else
+TEST_TARGET := $(ROOT)/workflow_definitions/$(WORKFLOW)/tests
+endif
+
+test-workflow: check-uv
+	uv run --with $(ROOT)/packages/wirl-pregel-runner -- pytest $(TEST_TARGET) $(PYTEST_ARGS)
+
+test-all-workflows: check-uv
+	uv run --with $(ROOT)/packages/wirl-pregel-runner -- pytest $(ROOT)/workflow_definitions $(PYTEST_ARGS)
+
+#
+# Running a workflow from the DSL file
+#
+# Usage examples:
+#   make run-workflow WORKFLOW=paper_rename_workflow FUNCS=workflow_definitions.paper_rename_workflow.paper_rename_workflow \
+#        PARAMS="drafts_folder_path=/abs/path processed_folder_path=/abs/path"
+#
+# Required:
+#   WORKFLOW: directory name under workflow_definitions/
+#   FUNCS: Python module with workflow functions (import path)
+# Optional:
+#   PARAMS: space-separated key=value pairs passed as --param to the runner
+
+WORKFLOW ?=
+FUNCS ?=
+PARAMS ?=
+
+define PARAM_FLAGS
+$(foreach p,$(PARAMS),--param $(p))
+endef
+
+run-workflow: check-uv
+	@if [ -z "$(WORKFLOW)" ] || [ -z "$(FUNCS)" ]; then \
+	  echo "Usage: make run-workflow WORKFLOW=<dir> FUNCS=<module.path> [PARAMS=\"k=v k2=v2\"]"; \
+	  exit 1; \
+	fi
+	uv run --with $(ROOT)/packages/wirl-pregel-runner -- \
+	  python -m wirl_pregel_runner.pregel_runner \
+	  $(ROOT)/workflow_definitions/$(WORKFLOW)/$(WORKFLOW).wirl \
+	  --functions $(FUNCS) \
+	  $(PARAM_FLAGS)
