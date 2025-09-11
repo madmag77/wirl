@@ -93,11 +93,9 @@ chmod +x scripts/macos/container-start-postgres.sh
 ./scripts/macos/container-start-postgres.sh
 ```
 
-Now the services can be run. 
+Now the services can be run.
 
-### Option 1: Manual with Overmind (Development)
-Run all apps locally using `overmind` and the included `Procfile`:
-
+### Installing dependencies
 ```bash
 # Install overmind
 brew install overmind
@@ -110,7 +108,12 @@ make workflows-setup-dev
 # create .env file in the root of the project with two vars
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows # in case you use local postgres
 WORKFLOW_DEFINITIONS_PATH=/Users/username/wirl/workflow_definitions # absolute path to workflow definitions
+```
 
+### Option 1: Manual with Overmind (Development)
+Run all apps locally using `overmind` and the included `Procfile`:
+
+```bash
 # Start all services (postgres, backend, workers, frontend)
 overmind start
 # or
