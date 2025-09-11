@@ -1,0 +1,28 @@
+# Example of a GitHub Actions workflow to trigger a workflow run that sorts documents in your Cloud Drive
+name: Document sort job
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Runs every day at 5am
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: self-hosted  # This ensures it runs on your self-hosted runner
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main  # Ensures we check out the main branch
+
+      - name: Trigger Workflow Endpoint
+        run: |
+          curl -X POST http://localhost:8000/workflows \
+            -H "Content-Type: application/json" \
+            -d '{
+              "template_name": "paper_rename_workflow",
+              "inputs": {
+                "drafts_folder_path": "/Users/username/Library/Mobile Documents/com~apple~CloudDocs/papers_unsorted",
+                "processed_folder_path": "/Users/username/Library/Mobile Documents/com~apple~CloudDocs/papers_sorted"
+              }
+            }'
