@@ -3,7 +3,7 @@
 FastAPI service that exposes workflow templates, runs workflows, and serves history via a simple REST API. Ships with SQLAlchemy models and a minimal schema created at startup.
 
 - **Docs**: available at `/api/docs`
-- **Default port**: 8000 (Procfile) or 8008 when using the backend `Makefile`
+- **Default port**: 8000 (Procfile) or 8000 when using the backend `Makefile`
 - **Python**: 3.10+
 
 ## Contents
@@ -31,10 +31,10 @@ Then start Postgres and the backend:
 ./scripts/start-postgres.sh
 
 # Start backend from this directory (apps/backend)
-make run                   # uvicorn backend.main:app --host 0.0.0.0 --port 8008 --reload
+make run                   # uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open: `http://localhost:8008/api/docs`
+Open: `http://localhost:8000/api/docs`
 
 If you prefer the defaults used by the Procfile (port 8000), run uvicorn directly:
 
@@ -60,7 +60,7 @@ Using the backend `Makefile` (this directory):
 # Install backend package in editable mode
 make install         # or: make install-dev
 
-# Run the API on 0.0.0.0:8008
+# Run the API on 0.0.0.0:8000
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows \
 make run
 ```
@@ -92,7 +92,7 @@ All endpoints return JSON. See live docs at `/api/docs` when the server is runni
 Example (start a workflow):
 
 ```bash
-curl -X POST http://localhost:8008/workflows \
+curl -X POST http://localhost:8000/workflows \
   -H 'Content-Type: application/json' \
   -d '{"template_name":"sample","inputs":{"query":"Hello"}}'
 ```

@@ -14,7 +14,7 @@ lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --di
 
 APP_MODULE?=backend.main:app
 HOST?=0.0.0.0
-PORT?=8008
+PORT?=8000
 
 install:
 	uv pip install --python $(PY) -e .
@@ -30,7 +30,8 @@ format format_diff:
 	$(PY) -m ruff check --select I --fix $(PYTHON_FILES)
 
 run:
-	$(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
+# need to cd to root to find the workflow_definitions directory
+	cd $(ROOT) && $(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
 
 test:
 	$(PY) -m pytest -q tests

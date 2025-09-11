@@ -2,12 +2,7 @@ import os
 from pathlib import Path
 from typing import List, Dict
 
-WORKFLOWS_DIR_NAME = os.getenv("WORKFLOWS_DIR", "workflow_definitions")
-
-# Use current working directory as workspace root
-WORKSPACE_ROOT = Path.cwd()
-WORKFLOWS_DIR = WORKSPACE_ROOT / WORKFLOWS_DIR_NAME
-
+WORKFLOWS_DIR = Path(os.getenv("WORKFLOW_DEFINITIONS_PATH", "workflow_definitions"))
 
 def list_templates() -> List[Dict[str, str]]:
     templates: List[Dict[str, str]] = []

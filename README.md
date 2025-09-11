@@ -81,15 +81,40 @@ workflow_definitions/<workflow_name>/
 
 ## Running on macOS
 
+### Runnning postgres
+First Postgres needs to be installed. On Macos it's possible to use `container` service or `docker`.
+
+In case of `container`:
+1. Install container using this [link](https://github.com/apple/container/releases)
+2. Run it: `container system start`
+3. Run the following script, which will pull postgres image and run it:
+```bash
+chmod +x scripts/macos/container-start-postgres.sh
+./scripts/macos/container-start-postgres.sh
+```
+
+Now the services can be run. 
+
 ### Option 1: Manual with Overmind (Development)
-Run all apps locally using overmind and the included `Procfile`:
+Run all apps locally using `overmind` and the included `Procfile`:
 
 ```bash
 # Install overmind
 brew install overmind
 
+# Install all dependencies
+make workflows-setup
+# or installing all dependencies in Dev mode if you want to make changes in apps and test them
+make workflows-setup-dev
+
+# create .env file in the root of the project with two vars
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows # in case you use local postgres
+WORKFLOW_DEFINITIONS_PATH=/Users/username/wirl/workflow_definitions # absolute path to workflow definitions
+
 # Start all services (postgres, backend, workers, frontend)
 overmind start
+# or
+make run_wirl_apps
 ```
 
 Services will run on:

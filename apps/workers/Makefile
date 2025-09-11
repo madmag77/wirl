@@ -28,7 +28,7 @@ format format_diff:
 	$(PY) -m ruff check --select I --fix $(PYTHON_FILES)
 
 run:
-	$(PY) -m workers.worker_pool
+	cd $(ROOT) && $(PY) -m workers.worker_pool
 
 test:
 	$(PY) -m pytest -q tests
