@@ -13,7 +13,8 @@ dependencies = [
   "langgraph>=0.4",
   "wirl-pregel-runner>=0.1.0",
   "langgraph-checkpoint-sqlite",
-  "langgraph-checkpoint-postgres"
+  "langgraph-checkpoint-postgres",
+  "psycopg[binary]>=3.2"
 ]
 
 [project.urls]

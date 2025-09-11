@@ -126,7 +126,7 @@ Services will run on:
 - Postgres: via Docker container
 
 ### Option 2: Auto-start Service (Production)
-Install as a macOS LaunchAgent service that starts automatically on boot:
+Install as a macOS LaunchAgent service that starts automatically on system start:
 
 ```bash
 # One-command installation

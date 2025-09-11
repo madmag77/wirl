@@ -12,14 +12,14 @@
         <string>-f</string>
         <string>procfile</string>
         <string>-s</string>
-        <string>/{PATH TO REPO}/.overmind.sock</string>
+        <string>{PATH TO REPO}/.overmind.sock</string>
     </array>
     
     <key>UserName</key>
     <string>{USERNAME}</string>
     
     <key>WorkingDirectory</key>
-    <string>/{PATH TO REPO}/</string>
+    <string>{PATH TO REPO}</string>
     
     <key>EnvironmentVariables</key>
     <dict>
@@ -37,7 +37,7 @@
     <string>{PATH TO HOME FOLDER}/.local/log/wirl-workflows-overmind.out</string>
     
     <key>StandardErrorPath</key>
-    <string>{PATH TO HOME FOLDER}.local/log/wirl-workflows-overmind.err</string>
+    <string>{PATH TO HOME FOLDER}/.local/log/wirl-workflows-overmind.err</string>
     
     <key>ProcessType</key>
     <string>Interactive</string>
