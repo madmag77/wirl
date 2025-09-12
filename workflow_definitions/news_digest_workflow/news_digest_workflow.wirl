@@ -1,0 +1,64 @@
+workflow NewsDigestWorkflow {
+
+  metadata {
+    description: "Collect recent news, summarize, and email the digest"
+    owner: "assistant"
+    version: "1.0"
+  }
+
+  inputs {
+    String trigger
+  }
+
+  outputs {
+    String summary = SummarizeNews.summary
+  }
+
+  node GetResources {
+    call get_resources
+    inputs {
+      String trigger = trigger
+    }
+    outputs {
+      List<T<NewsResource>> resources
+    }
+  }
+
+  node FetchNews {
+    call fetch_news
+    inputs {
+      List<T<NewsResource>> resources = GetResources.resources
+    }
+    const {
+      days_back: 7
+    }
+    outputs {
+      List<T<NewsItem>> news_items
+    }
+  }
+
+  node SummarizeNews {
+    call summarize_news
+    inputs {
+      List<T<NewsItem>> news_items = FetchNews.news_items
+    }
+    const {
+      model: "llama3.1:8b"
+      base_url: "http://localhost:11434/v1/"
+      temperature: 0
+    }
+    outputs {
+      String summary
+    }
+  }
+
+  node SendEmail {
+    call send_email
+    inputs {
+      String summary = SummarizeNews.summary
+    }
+    outputs {
+      Bool success
+    }
+  }
+}
