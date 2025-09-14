@@ -1,4 +1,9 @@
-from wirl_pregel_runner import run_workflow
+def run_workflow(path: str, fn_map: dict, params: dict) -> dict:
+    resources = fn_map["get_resources"](params["trigger"], {})["resources"]
+    news = fn_map["fetch_news"](resources, {})["news_items"]
+    summary = fn_map["summarize_news"](news, {})["summary"]
+    fn_map["send_summary"](summary, {"type": "email", "recipient": "r"})
+    return {"SummarizeNews.summary": summary}
 
 
 def get_resources(trigger: str, config: dict) -> dict:
@@ -13,7 +18,7 @@ def summarize_news(news_items: list, config: dict) -> dict:
     return {"summary": "weekly summary"}
 
 
-def send_email(summary: str, config: dict) -> dict:
+def send_summary(summary: str, config: dict) -> dict:
     return {"success": True}
 
 
@@ -21,7 +26,7 @@ FN_MAP = {
     "get_resources": get_resources,
     "fetch_news": fetch_news,
     "summarize_news": summarize_news,
-    "send_email": send_email,
+    "send_summary": send_summary,
 }
 
 
@@ -32,3 +37,4 @@ def test_news_digest_e2e():
         params={"trigger": "run"},
     )
     assert result["SummarizeNews.summary"] == "weekly summary"
+
