@@ -10,7 +10,6 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 import logging
 import dotenv
@@ -50,15 +49,20 @@ def get_resources(trigger: str, config: dict) -> dict:
     resources = [
         {"url": "https://karpathy.bearblog.dev/feed/", "type": ResourceType.RSS},
         {"url": "https://www.anthropic.com/news", "type": ResourceType.WEB},
-        #{"url": "https://openai.com/news/research/", "type": ResourceType.WEB},
+        {"url": "https://openai.com/news/research/", "type": ResourceType.WEB},
     ]
     return {"resources": [NewsResource(**r) for r in resources]}
 
 
 def fetch_news(resources: list[NewsResource], config: dict) -> dict:
-    days_back = 10
+    days_back = config.get("days_back", 7)
+    model = config.get("model")
+    reasoning = config.get("reasoning", False)
+    temperature = config.get("temperature", 0)
     start_date = datetime.utcnow() - timedelta(days=days_back)
     start_date = start_date.replace(tzinfo=timezone.utc)
+    end_date = datetime.utcnow() + timedelta(days=1)
+    end_date = end_date.replace(tzinfo=timezone.utc)
     news_items: list[NewsItem] = []
     headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -88,28 +92,31 @@ def fetch_news(resources: list[NewsResource], config: dict) -> dict:
                 if resp.status_code != 200:
                     continue
                 soup = BeautifulSoup(resp.text, "html.parser")
-                txt = "\n\n".join(f"link: {a.get('href', '')}, text: {a.get_text(" ", strip=True)}" for a in soup.find_all("a"))
+                batch_size = 20
                 llm = ChatOllama(
-                        model="deepseek-r1:8b",
-                        temperature=0,
+                        model=model,
+                        temperature=temperature,
                         validate_model_on_init = True,
-                        reasoning= True,
+                        reasoning=reasoning,
                 )
                 llm_news_item = llm.with_structured_output(NewsItems, method="json_schema")
-                resp = llm_news_item.invoke(f"Extract news items from the following text {txt}")
-                for item in resp.news_items:
-                    if item.published < start_date:
-                        continue
+                for i in range(0, len(soup.find_all("a")), batch_size):
+                    text = "\n\n".join(f"link: {a.get('href', '')}, text: {a.get_text(" ", strip=True)}" for a in soup.find_all("a")[i:i+batch_size])
+                    resp = llm_news_item.invoke(f"Extract news items from the following text {text}")
+                    for item in resp.news_items:
+                        # Filter out old news and news with mistakenly parsed published date
+                        if item.published < start_date and item.published > end_date:
+                            continue
 
-                    link = urljoin(res.url, item.link)
-                    summary = ""
-                    try:
-                        article = requests.get(link, headers=headers, timeout=10)
-                        art_soup = BeautifulSoup(article.text, "html.parser")
-                        summary = " ".join(art_soup.get_text(" ", strip=True).split())
-                    except Exception:
-                        pass
-                    news_items.append(NewsItem(title=item.title, link=link, published=item.published, summary=summary))
+                        link = urljoin(res.url, item.link)
+                        summary = ""
+                        try:
+                            article = requests.get(link, headers=headers, timeout=10)
+                            art_soup = BeautifulSoup(article.text, "html.parser")
+                            summary = " ".join(art_soup.get_text(" ", strip=True).split())
+                        except Exception:
+                            pass
+                        news_items.append(NewsItem(title=item.title, link=link, published=item.published, summary=summary))
         except Exception as e:
             logger.warning(f"Failed to parse {res.url}: {e}")
 
@@ -121,14 +128,14 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         return {"summary": "No new items."}
     
     model = config.get("model")
-    base_url = config.get("base_url")
+    reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
     
-    llm = ChatOpenAI(
+    llm = ChatOllama(
         model=model,
-        base_url=base_url,
+        reasoning=reasoning,
         temperature=temperature,
-        api_key=os.getenv("OPENAI_API_KEY", "sk"),
+        validate_model_on_init = True,
     )
     
     for item in news_items:
