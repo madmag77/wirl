@@ -151,17 +151,17 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
 
 def send_summary(summary: str, config: dict) -> dict:
     delivery_type = config.get("type", "email")
-    recipient = config.get("recipient")
     if delivery_type == "telegram":
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
         if not token:
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
-        if not recipient:
+        if not chat_id:
             raise ValueError("recipient is required for telegram delivery")
 
         async def _send() -> None:
             bot = Bot(token=token)
-            await bot.send_message(recipient, "Here is the news digest:\n\n" + summary)
+            await bot.send_message(chat_id, "Here is the news digest:\n\n" + summary)
             await bot.session.close()
 
         asyncio.run(_send())
@@ -171,18 +171,19 @@ def send_summary(summary: str, config: dict) -> dict:
         smtp_username = os.environ.get("SMTP_USERNAME")
         smtp_password = os.environ.get("SMTP_PASSWORD")
         from_email = os.environ.get("FROM_EMAIL")
+        to_email = os.environ.get("TO_EMAIL")
 
         if not smtp_server:
             raise ValueError("SMTP_SERVER environment variable is required")
         if not from_email:
             raise ValueError("FROM_EMAIL environment variable is required")
-        if not recipient:
+        if not to_email:
             raise ValueError("recipient is required for email delivery")
 
         msg = EmailMessage()
-        msg["Subject"] = "Weekly News Digest"
+        msg["Subject"] = "News Digest"
         msg["From"] = from_email
-        msg["To"] = recipient
+        msg["To"] = to_email
         msg.set_content("Here is the news digest:\n\n" + summary)
 
         try:

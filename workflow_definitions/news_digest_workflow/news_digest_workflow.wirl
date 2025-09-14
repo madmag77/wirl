@@ -61,8 +61,7 @@ workflow NewsDigestWorkflow {
       String summary = SummarizeNews.summary
     }
     const {
-      type: "email"
-      recipient: "recipient@example.com"
+      type: "telegram"
     }
     outputs {
       Bool success

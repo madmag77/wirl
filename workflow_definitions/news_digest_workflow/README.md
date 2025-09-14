@@ -23,6 +23,42 @@ FROM_EMAIL=sender@example.com    # required for email
 TELEGRAM_BOT_TOKEN=123456:ABCDEF # required for telegram
 ```
 
+### Setting up Telegram Bot
+
+To use Telegram delivery, you need to create a Telegram bot and get your chat ID:
+
+#### 1. Create a Telegram Bot with BotFather
+
+1. Open Telegram and search for `@BotFather`
+2. Start a chat with BotFather by clicking "Start" or sending `/start`
+3. Create a new bot by sending `/newbot`
+4. Follow the prompts:
+   - Choose a name for your bot (e.g., "My News Digest Bot")
+   - Choose a username for your bot (must end with "bot", e.g., "mynewsdigestbot")
+5. BotFather will provide you with a bot token that looks like `123456789:ABCDEFghijklmnopqrstuvwxyz`
+6. Copy this token and add it to your `.env` file as `TELEGRAM_BOT_TOKEN`
+
+#### 2. Get Your Chat ID
+
+After creating the bot, you need to get your chat ID to receive messages:
+
+1. Start a chat with your newly created bot by searching for its username
+2. Send any message to the bot (e.g., "Hello")
+3. Run the following command to get your chat ID:
+
+```bash
+make get_telegram_chat_id
+```
+
+This command will return your chat ID (a number like `123456789`). Add this ID to your `.env` file as `TELEGRAM_CHAT_ID`. 
+Choose the type of transport as `email` or `telegram` in `const` section of you `SendSummary` node, like this
+```
+    const {
+      type: "telegram"
+    }
+```
+
+
 ## Running
 
 Activate the virtual environment and execute the workflow:
