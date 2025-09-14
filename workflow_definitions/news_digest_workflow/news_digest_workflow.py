@@ -1,8 +1,15 @@
 import os
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+import logging
 import smtplib
+from enum import Enum
+from urllib.parse import urljoin
+
 import feedparser
+import requests
+from bs4 import BeautifulSoup
+from dateutil import parser as dateparser
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 import logging
@@ -13,9 +20,14 @@ logger = logging.getLogger(__name__)
 dotenv.load_dotenv()
 
 
+class ResourceType(str, Enum):
+    RSS = "rss"
+    WEB = "web"
+
+
 class NewsResource(BaseModel):
     url: str = Field(description="Resource URL")
-    type: str = Field(description="Type of the resource e.g. web, twitter")
+    type: ResourceType = Field(description="Type of the resource")
 
 
 class NewsItem(BaseModel):
@@ -27,9 +39,9 @@ class NewsItem(BaseModel):
 
 def get_resources(trigger: str, config: dict) -> dict:
     resources = [
-        {"url": "https://karpathy.bearblog.dev/feed/", "type": "web"},
-        {"url": "https://www.anthropic.com/news", "type": "web"},
-        {"url": "https://openai.com/news/research/", "type": "web"},
+        {"url": "https://karpathy.bearblog.dev/feed/", "type": ResourceType.RSS},
+        {"url": "https://www.anthropic.com/news", "type": ResourceType.WEB},
+        {"url": "https://openai.com/news/research/", "type": ResourceType.WEB},
     ]
     return {"resources": [NewsResource(**r) for r in resources]}
 
@@ -38,26 +50,59 @@ def fetch_news(resources: list[NewsResource], config: dict) -> dict:
     days_back = config.get("days_back", 180)
     start_date = datetime.utcnow() - timedelta(days=days_back)
     news_items: list[NewsItem] = []
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     for res in resources:
-        if res.type != "web":
-            continue
-        feed = feedparser.parse(res.url)
-        for entry in getattr(feed, "entries", []):
-            published_parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
-            if not published_parsed:
-                continue
-            published = datetime(*published_parsed[:6])
-            if published < start_date:
-                continue
-            summary = entry.get("summary", "")
-            news_items.append(
-                NewsItem(title=entry.get("title", ""),
-                         link=entry.get("link", ""),
-                         published=published,
-                         summary=summary)
-            )
-    print(news_items)
+        try:
+            if res.type == ResourceType.RSS:
+                feed = feedparser.parse(res.url)
+                for entry in getattr(feed, "entries", []):
+                    published_parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+                    if not published_parsed:
+                        continue
+                    published = datetime(*published_parsed[:6])
+                    if published < start_date:
+                        continue
+                    summary = entry.get("summary", "")
+                    news_items.append(
+                        NewsItem(
+                            title=entry.get("title", ""),
+                            link=entry.get("link", ""),
+                            published=published,
+                            summary=summary,
+                        )
+                    )
+            elif res.type == ResourceType.WEB:
+                resp = requests.get(res.url, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for a in soup.find_all("a"):
+                    href = a.get("href")
+                    text = a.get_text(" ", strip=True)
+                    if not href or not text:
+                        continue
+                    context = a.parent.get_text(" ", strip=True)
+                    try:
+                        published = dateparser.parse(context, fuzzy=True)
+                    except Exception:
+                        continue
+                    if published < start_date:
+                        continue
+                    link = urljoin(res.url, href)
+                    summary = ""
+                    try:
+                        article = requests.get(link, headers=headers, timeout=10)
+                        art_soup = BeautifulSoup(article.text, "html.parser")
+                        summary = " ".join(art_soup.get_text(" ", strip=True).split())[:500]
+                    except Exception:
+                        pass
+                    news_items.append(
+                        NewsItem(title=text, link=link, published=published, summary=summary)
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to parse {res.url}: {e}")
+
     return {"news_items": news_items}
 
 
@@ -119,3 +164,4 @@ def send_email(summary: str, config: dict) -> dict:
         raise e
 
     return {"success": True}
+

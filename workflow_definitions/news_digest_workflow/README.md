@@ -1,6 +1,6 @@
 # News Digest Workflow
 
-This workflow collects recent news from preset web resources, summarizes the updates with a local LLM and emails the digest.
+This workflow collects recent news from preset resources—a mix of RSS feeds and standard web pages—summarizes the updates with a local LLM and emails the digest.
 
 ## Setup
 

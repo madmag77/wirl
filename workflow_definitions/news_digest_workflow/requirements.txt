@@ -1,2 +1,5 @@
 feedparser
 langchain-openai
+requests
+beautifulsoup4
+python-dateutil
