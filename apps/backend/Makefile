@@ -31,7 +31,7 @@ format format_diff:
 
 run:
 # need to cd to root to find the workflow_definitions directory
-	cd $(ROOT) && $(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
+	cd $(ROOT) && $(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT)
 
 test:
 	$(PY) -m pytest -q tests

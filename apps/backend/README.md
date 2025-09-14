@@ -31,7 +31,7 @@ Then start Postgres and the backend:
 ./scripts/start-postgres.sh
 
 # Start backend from this directory (apps/backend)
-make run                   # uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+make run                   # uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
 Open: `http://localhost:8000/api/docs`

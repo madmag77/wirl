@@ -6,8 +6,11 @@ import feedparser
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 import logging
+import dotenv
 
 logger = logging.getLogger(__name__)
+
+dotenv.load_dotenv()
 
 
 class NewsResource(BaseModel):
@@ -24,7 +27,7 @@ class NewsItem(BaseModel):
 
 def get_resources(trigger: str, config: dict) -> dict:
     resources = [
-        {"url": "https://karpathy.bearblog.dev/blog/", "type": "web"},
+        {"url": "https://karpathy.bearblog.dev/feed/", "type": "web"},
         {"url": "https://www.anthropic.com/news", "type": "web"},
         {"url": "https://openai.com/news/research/", "type": "web"},
     ]
@@ -32,7 +35,7 @@ def get_resources(trigger: str, config: dict) -> dict:
 
 
 def fetch_news(resources: list[NewsResource], config: dict) -> dict:
-    days_back = config.get("days_back", 7)
+    days_back = config.get("days_back", 180)
     start_date = datetime.utcnow() - timedelta(days=days_back)
     news_items: list[NewsItem] = []
 
@@ -54,6 +57,7 @@ def fetch_news(resources: list[NewsResource], config: dict) -> dict:
                          published=published,
                          summary=summary)
             )
+    print(news_items)
     return {"news_items": news_items}
 
 
@@ -75,6 +79,7 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
     text = "\n\n".join([f"{item.title}: {item.summary}" for item in news_items])
     response = llm.invoke(f"Provide a concise summary of the following news items:\n{text}")
     summary = getattr(response, "content", str(response))
+    print(summary)
     return {"summary": summary}
 
 
@@ -86,18 +91,29 @@ def send_email(summary: str, config: dict) -> dict:
     from_email = os.environ.get("FROM_EMAIL")
     to_email = os.environ.get("TO_EMAIL")
 
+    # Validate required environment variables
+    if not smtp_server:
+        raise ValueError("SMTP_SERVER environment variable is required")
+    if not from_email:
+        raise ValueError("FROM_EMAIL environment variable is required")
+    if not to_email:
+        raise ValueError("TO_EMAIL environment variable is required")
+
     msg = EmailMessage()
     msg["Subject"] = "Weekly News Digest"
     msg["From"] = from_email
     msg["To"] = to_email
-    msg.set_content(summary)
+    msg.set_content("Here is the news digest:\n\n" + summary)
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
+            server.ehlo()  # Identify ourselves to the server
+            server.starttls()  # Enable TLS encryption
+            server.ehlo()  # Re-identify ourselves after TLS
             if smtp_username and smtp_password:
                 server.login(smtp_username, smtp_password)
             server.send_message(msg)
+        logger.info("Email sent successfully")
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
         raise e
