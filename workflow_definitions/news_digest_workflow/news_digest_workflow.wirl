@@ -1,7 +1,7 @@
 workflow NewsDigestWorkflow {
 
   metadata {
-    description: "Collect recent news, summarize, and email the digest"
+    description: "Collect recent news, summarize, and deliver the digest"
     owner: "assistant"
     version: "1.0"
   }
@@ -55,10 +55,14 @@ workflow NewsDigestWorkflow {
     }
   }
 
-  node SendEmail {
-    call send_email
+  node SendSummary {
+    call send_summary
     inputs {
       String summary = SummarizeNews.summary
+    }
+    const {
+      type: "email"
+      recipient: "recipient@example.com"
     }
     outputs {
       Bool success
