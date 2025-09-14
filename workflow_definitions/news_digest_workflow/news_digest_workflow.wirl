@@ -43,7 +43,7 @@ workflow NewsDigestWorkflow {
       List<T<NewsItem>> news_items = FetchNews.news_items
     }
     const {
-      model: "llama3.1:8b"
+      model: "gpt-oss:20b"
       base_url: "http://localhost:11434/v1/"
       temperature: 0
     }
