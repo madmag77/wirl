@@ -105,7 +105,7 @@ def fetch_news(resources: list[NewsResource], config: dict) -> dict:
                     resp = llm_news_item.invoke(f"Extract news items from the following text {text}")
                     for item in resp.news_items:
                         # Filter out old news and news with mistakenly parsed published date
-                        if item.published < start_date and item.published > end_date:
+                        if item.published < start_date or item.published > end_date:
                             continue
 
                         link = urljoin(res.url, item.link)
