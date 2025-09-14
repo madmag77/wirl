@@ -30,7 +30,10 @@ workflow NewsDigestWorkflow {
       List<T<NewsResource>> resources = GetResources.resources
     }
     const {
-      days_back: 7
+      days_back: 1
+      model: "qwen3:8b"
+      reasoning: True
+      temperature: 0
     }
     outputs {
       List<T<NewsItem>> news_items
@@ -43,8 +46,8 @@ workflow NewsDigestWorkflow {
       List<T<NewsItem>> news_items = FetchNews.news_items
     }
     const {
-      model: "llama3.1:8b"
-      base_url: "http://localhost:11434/v1/"
+      model: "gpt-oss:20b"
+      reasoning: False
       temperature: 0
     }
     outputs {
