@@ -145,7 +145,6 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         item.llm_summary = summary
 
     final_summary = "\n\n".join([f"{item.title}, {item.link}, {item.published}: {item.llm_summary}" for item in news_items])
-    print(final_summary)
     return {"summary": final_summary}
 
 
