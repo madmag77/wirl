@@ -1,17 +1,18 @@
 import os
-from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
+import asyncio
 import logging
 import smtplib
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from enum import Enum
 from urllib.parse import urljoin
-import json
+
 import feedparser
 import requests
+from aiogram import Bot
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
 from langchain_ollama import ChatOllama
-import logging
+from pydantic import BaseModel, Field
 import dotenv
 
 logger = logging.getLogger(__name__)
@@ -174,44 +175,58 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         item.llm_summary = summary
 
     final_summary = "\n\n".join([f"{item.title}, {item.link}, {item.published}: {item.llm_summary}" for item in news_items])
-    print(final_summary)
     return {"summary": final_summary}
 
 
-def send_email(summary: str, config: dict) -> dict:
-    smtp_server = os.environ.get("SMTP_SERVER")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_username = os.environ.get("SMTP_USERNAME")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-    from_email = os.environ.get("FROM_EMAIL")
-    to_email = os.environ.get("TO_EMAIL")
+def send_summary(summary: str, config: dict) -> dict:
+    delivery_type = config.get("type", "email")
+    if delivery_type == "telegram":
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+        if not token:
+            raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
+        if not chat_id:
+            raise ValueError("recipient is required for telegram delivery")
 
-    # Validate required environment variables
-    if not smtp_server:
-        raise ValueError("SMTP_SERVER environment variable is required")
-    if not from_email:
-        raise ValueError("FROM_EMAIL environment variable is required")
-    if not to_email:
-        raise ValueError("TO_EMAIL environment variable is required")
+        async def _send() -> None:
+            bot = Bot(token=token)
+            await bot.send_message(chat_id, "Here is the news digest:\n\n" + summary)
+            await bot.session.close()
 
-    msg = EmailMessage()
-    msg["Subject"] = "Weekly News Digest"
-    msg["From"] = from_email
-    msg["To"] = to_email
-    msg.set_content("Here is the news digest:\n\n" + summary)
+        asyncio.run(_send())
+    else:
+        smtp_server = os.environ.get("SMTP_SERVER")
+        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        smtp_username = os.environ.get("SMTP_USERNAME")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        from_email = os.environ.get("FROM_EMAIL")
+        to_email = os.environ.get("TO_EMAIL")
 
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.ehlo()  # Identify ourselves to the server
-            server.starttls()  # Enable TLS encryption
-            server.ehlo()  # Re-identify ourselves after TLS
-            if smtp_username and smtp_password:
-                server.login(smtp_username, smtp_password)
-            server.send_message(msg)
-        logger.info("Email sent successfully")
-    except Exception as e:
-        logger.error(f"Failed to send email: {e}")
-        raise e
+        if not smtp_server:
+            raise ValueError("SMTP_SERVER environment variable is required")
+        if not from_email:
+            raise ValueError("FROM_EMAIL environment variable is required")
+        if not to_email:
+            raise ValueError("recipient is required for email delivery")
+
+        msg = EmailMessage()
+        msg["Subject"] = "News Digest"
+        msg["From"] = from_email
+        msg["To"] = to_email
+        msg.set_content("Here is the news digest:\n\n" + summary)
+
+        try:
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                if smtp_username and smtp_password:
+                    server.login(smtp_username, smtp_password)
+                server.send_message(msg)
+            logger.info("Email sent successfully")
+        except Exception as e:
+            logger.error(f"Failed to send email: {e}")
+            raise e
 
     return {"success": True}
 

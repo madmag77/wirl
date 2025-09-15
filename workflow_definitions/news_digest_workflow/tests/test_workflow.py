@@ -25,7 +25,7 @@ def summarize_news(news_items: list, config: dict) -> dict:
     return {"summary": "weekly summary"}
 
 
-def send_email(summary: str, config: dict) -> dict:
+def send_summary(summary: str, config: dict) -> dict:
     return {"success": True}
 
 
@@ -34,7 +34,7 @@ FN_MAP = {
     "fetch_news": fetch_news,
     "collect_news": collect_news,
     "summarize_news": summarize_news,
-    "send_email": send_email,
+    "send_summary": send_summary,
 }
 
 

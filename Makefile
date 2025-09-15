@@ -1,4 +1,4 @@
-.PHONY: workflows-setup workflows-setup-dev init-venv check-uv check-overmind install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow run_wirl_apps install-frontend-deps
+.PHONY: workflows-setup workflows-setup-dev init-venv check-uv check-overmind install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow run_wirl_apps install-frontend-deps get_telegram_chat_id
 
 ROOT := $(CURDIR)
 VENV := $(ROOT)/.venv
@@ -105,3 +105,16 @@ run-workflow: check-uv
 	  $(ROOT)/workflow_definitions/$(WORKFLOW)/$(WORKFLOW).wirl \
 	  --functions $(FUNCS) \
 	  $(PARAM_FLAGS)
+
+# Get Telegram chat ID
+# Requires: .env file with TELEGRAM_BOT_TOKEN=your_token
+# Usage: make get_telegram_chat_id
+get_telegram_chat_id:
+	@if [ -f .env ]; then \
+		set -a && . ./.env && set +a; \
+	fi; \
+	if [ -z "$$TELEGRAM_BOT_TOKEN" ]; then \
+		echo "Error: TELEGRAM_BOT_TOKEN not set. Create .env file with TELEGRAM_BOT_TOKEN=your_token"; \
+		exit 1; \
+	fi; \
+	curl "https://api.telegram.org/bot$$TELEGRAM_BOT_TOKEN/getUpdates" | jq '.result[0].message.chat.id'

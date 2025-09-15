@@ -4,3 +4,4 @@ langchain-ollama
 requests
 beautifulsoup4
 python-dateutil
+aiogram
