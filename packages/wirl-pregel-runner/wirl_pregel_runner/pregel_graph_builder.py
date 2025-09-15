@@ -44,14 +44,44 @@ def _eval_condition(expr: str, state: Dict[str, Any]) -> bool:
         raise ValueError("Condition is None")
     
     expr = str(expr).strip()
-    # Replace variable names in the expression with their corresponding values from state
-    def repl(match):
-        key = match.group(0)
-        if key in state:
-            return repr(state[key])
-        return "False"
-    expr_py = re.sub(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", repl, expr)
-    return bool(eval(expr_py))
+    
+    # Create a safe evaluation namespace with state values
+    safe_globals = {"__builtins__": {}}
+    safe_locals = {}
+    
+    # Add state values to the evaluation namespace
+    for key, value in state.items():
+        # Handle dotted notation like "NodeName.output"
+        if '.' in key:
+            parts = key.split('.')
+            if len(parts) == 2:
+                node_name, attr_name = parts
+                if node_name not in safe_locals:
+                    safe_locals[node_name] = {}
+                safe_locals[node_name][attr_name] = value
+        else:
+            safe_locals[key] = value
+    
+    # Create objects for dotted access
+    class StateObject:
+        def __init__(self, data):
+            for k, v in data.items():
+                setattr(self, k, v)
+    
+    # Convert nested dicts to objects for attribute access
+    for key, value in list(safe_locals.items()):
+        if isinstance(value, dict):
+            safe_locals[key] = StateObject(value)
+    
+    try:
+        result = eval(expr, safe_globals, safe_locals)
+        # Only None or explicit False should evaluate to False
+        # Empty containers like [], {}, "", 0 should evaluate to True
+        return result is not None and result is not False
+    except (NameError, AttributeError) as e:
+        # If we can't evaluate due to missing names/attributes, return True
+        # This handles cases where types are not defined but values exist
+        return True
 
 def extract_dependencies(inputs: List, workflow_inputs: Set[str]) -> Set[str]:
     """Extract node dependencies from input assignments"""

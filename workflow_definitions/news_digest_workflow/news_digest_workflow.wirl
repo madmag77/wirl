@@ -48,7 +48,7 @@ workflow NewsDigestWorkflow {
         temperature: 0
       }
       outputs {
-        List<T<NewsItem>> news_items
+        List<T<NewsItem>> fetched_items
       }
     }
 
@@ -56,11 +56,11 @@ workflow NewsDigestWorkflow {
       call collect_news
       inputs {
         List<T<NewsResource>> remaining_resources_to_process = GetNextResource.remaining_resources?
-        List<T<NewsItem>> news_items = FetchNews.news_items?
+        List<T<NewsItem>> fetched_items = FetchNews.fetched_items?
         Bool no_resources_to_process = GetNextResource.no_resources_to_process?
       }
       when {
-        GetNextResource.no_resources_to_process or FetchNews.news_items
+        GetNextResource.no_resources_to_process or FetchNews.fetched_items
       }
       outputs {
         Bool is_done

@@ -54,7 +54,7 @@ def get_next_resource(
     resources_to_process = resources if resources else initial_resources_to_process
     if len(resources_to_process) == 0:
         return {"no_resources_to_process": True}
-    resource = resources_to_process.pop(0)
+    resource = NewsResource(**resources_to_process.pop(0))
     return {
         "resource": resource,
         "remaining_resources": resources_to_process,
@@ -137,12 +137,12 @@ def fetch_news(resource: NewsResource, config: dict) -> dict:
     except Exception as e:
         logger.warning(f"Failed to parse {resource.url}: {e}")
 
-    return {"news_items": news_items}
+    return {"fetched_items": news_items}
 
 
 def collect_news(
     remaining_resources_to_process: list[NewsResource],
-    news_items: list[NewsItem] | None,
+    fetched_items: list[NewsItem] | None,
     no_resources_to_process: bool,
     config: dict,
 ) -> dict:
@@ -150,7 +150,7 @@ def collect_news(
         return {"is_done": True, "news_items": []}
     return {
         "is_done": len(remaining_resources_to_process) == 0,
-        "news_items": news_items or [],
+        "news_items": fetched_items or [],
     }
 
 
