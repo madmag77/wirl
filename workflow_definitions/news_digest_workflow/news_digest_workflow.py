@@ -210,7 +210,7 @@ def send_summary(summary: str, config: dict) -> dict:
             raise ValueError("recipient is required for email delivery")
 
         msg = EmailMessage()
-        msg["Subject"] = "News Digest"
+        msg["Subject"] = f"News Digest {datetime.now().strftime('%d-%m-%Y')}"
         msg["From"] = from_email
         msg["To"] = to_email
         msg.set_content("Here is the news digest:\n\n" + summary)
