@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel, Field
 import dotenv
+import markdown
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ def fetch_news(resource: NewsResource, config: dict) -> dict:
                     temperature=temperature,
                     validate_model_on_init=True,
                     reasoning=reasoning,
+                    timeout=120,
                 )
                 llm_news_item = llm.with_structured_output(NewsItems, method="json_schema")
                 for i in range(0, len(soup.find_all("a")), batch_size):
@@ -167,6 +169,7 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         reasoning=reasoning,
         temperature=temperature,
         validate_model_on_init = True,
+        timeout=120,
     )
     
     for item in news_items:
@@ -174,7 +177,14 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         summary = getattr(response, "content", str(response))
         item.llm_summary = summary
 
-    final_summary = "\n\n".join([f"{item.title}, {item.link}, {item.published}: {item.llm_summary}" for item in news_items])
+    # Format summary as markdown for better email display
+    markdown_items = []
+    for item in news_items:
+        published_date = item.published.strftime('%Y-%m-%d')
+        markdown_item = f"## [{item.title}]({item.link})\n\n**Published:** {published_date}\n\n{item.llm_summary}\n\n---"
+        markdown_items.append(markdown_item)
+    
+    final_summary = "\n\n".join(markdown_items)
     return {"summary": final_summary}
 
 
@@ -213,7 +223,11 @@ def send_summary(summary: str, config: dict) -> dict:
         msg["Subject"] = f"News Digest {datetime.now().strftime('%d-%m-%Y')}"
         msg["From"] = from_email
         msg["To"] = to_email
-        msg.set_content("Here is the news digest:\n\n" + summary)
+        
+        # Convert markdown to HTML for proper email display
+        html_content = markdown.markdown("Here is the news digest:\n\n" + summary)
+        msg.set_content("Here is the news digest:\n\n" + summary)  # Plain text fallback
+        msg.add_alternative(html_content, subtype='html')
 
         try:
             with smtplib.SMTP(smtp_server, smtp_port) as server:
