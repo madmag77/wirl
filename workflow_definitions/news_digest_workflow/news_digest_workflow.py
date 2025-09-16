@@ -46,82 +46,112 @@ class NewsItems(BaseModel):
     news_items: list[NewsItemLLM] = Field(description="List of news items")
 
 
-def get_resources(trigger: str, config: dict) -> dict:
-    resources = [
-        {"url": "https://karpathy.bearblog.dev/feed/", "type": ResourceType.RSS},
-        {"url": "https://www.anthropic.com/news", "type": ResourceType.WEB},
-        {"url": "https://openai.com/news/research/", "type": ResourceType.WEB},
-    ]
-    return {"resources": [NewsResource(**r) for r in resources]}
+def get_next_resource(
+    resources: list[NewsResource] | None,
+    initial_resources_to_process: list[NewsResource],
+    config: dict,
+) -> dict:
+    resources_to_process = resources if resources else initial_resources_to_process
+    if len(resources_to_process) == 0:
+        return {"no_resources_to_process": True}
+    resource = NewsResource(**resources_to_process.pop(0))
+    return {
+        "resource": resource,
+        "remaining_resources": resources_to_process,
+    }
 
 
-def fetch_news(resources: list[NewsResource], config: dict) -> dict:
+def fetch_news(resource: NewsResource, config: dict) -> dict:
     days_back = config.get("days_back", 7)
     model = config.get("model")
     reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
     start_date = datetime.utcnow() - timedelta(days=days_back)
-    start_date = start_date.replace(tzinfo=timezone.utc)
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
     end_date = datetime.utcnow() + timedelta(days=1)
     end_date = end_date.replace(tzinfo=timezone.utc)
     news_items: list[NewsItem] = []
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    for res in resources:
-        try:
-            if res.type == ResourceType.RSS:
-                feed = feedparser.parse(res.url)
-                for entry in getattr(feed, "entries", []):
-                    published_parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
-                    if not published_parsed:
-                        continue
-                    published = datetime(*published_parsed[:6])
-                    published = published.replace(tzinfo=timezone.utc)
-                    if published < start_date:
-                        continue
-                    summary = entry.get("summary", "")
-                    news_items.append(
-                        NewsItem(
-                            title=entry.get("title", ""),
-                            link=entry.get("link", ""),
-                            published=published,
-                            summary=summary,
-                        )
-                    )
-            elif res.type == ResourceType.WEB:
-                resp = requests.get(res.url, headers=headers, timeout=10)
-                if resp.status_code != 200:
+    try:
+        if resource.type == ResourceType.RSS:
+            feed = feedparser.parse(resource.url)
+            for entry in getattr(feed, "entries", []):
+                published_parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+                if not published_parsed:
                     continue
+                published = datetime(*published_parsed[:6])
+                published = published.replace(tzinfo=timezone.utc)
+                if published < start_date:
+                    continue
+                summary = entry.get("summary", "")
+                news_items.append(
+                    NewsItem(
+                        title=entry.get("title", ""),
+                        link=entry.get("link", ""),
+                        published=published,
+                        summary=summary,
+                    )
+                )
+        elif resource.type == ResourceType.WEB:
+            resp = requests.get(resource.url, headers=headers, timeout=10)
+            if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
                 batch_size = 20
                 llm = ChatOllama(
-                        model=model,
-                        temperature=temperature,
-                        validate_model_on_init = True,
-                        reasoning=reasoning,
+                    model=model,
+                    temperature=temperature,
+                    validate_model_on_init=True,
+                    reasoning=reasoning,
                 )
                 llm_news_item = llm.with_structured_output(NewsItems, method="json_schema")
                 for i in range(0, len(soup.find_all("a")), batch_size):
-                    text = "\n\n".join(f"link: {a.get('href', '')}, text: {a.get_text(" ", strip=True)}" for a in soup.find_all("a")[i:i+batch_size])
-                    resp = llm_news_item.invoke(f"Extract news items from the following text {text}")
+                    text = "\n\n".join(
+                        f"link: {a.get('href', '')}, text: {a.get_text(' ', strip=True)}"
+                        for a in soup.find_all("a")[i : i + batch_size]
+                    )
+                    resp = llm_news_item.invoke(
+                        f"Extract news items from the following text {text}"
+                    )
                     for item in resp.news_items:
-                        # Filter out old news and news with mistakenly parsed published date
                         if item.published < start_date or item.published > end_date:
                             continue
-
-                        link = urljoin(res.url, item.link)
+                        link = urljoin(resource.url, item.link)
                         summary = ""
                         try:
                             article = requests.get(link, headers=headers, timeout=10)
                             art_soup = BeautifulSoup(article.text, "html.parser")
-                            summary = " ".join(art_soup.get_text(" ", strip=True).split())
+                            summary = " ".join(
+                                art_soup.get_text(" ", strip=True).split()
+                            )
                         except Exception:
                             pass
-                        news_items.append(NewsItem(title=item.title, link=link, published=item.published, summary=summary))
-        except Exception as e:
-            logger.warning(f"Failed to parse {res.url}: {e}")
+                        news_items.append(
+                            NewsItem(
+                                title=item.title,
+                                link=link,
+                                published=item.published,
+                                summary=summary,
+                            )
+                        )
+    except Exception as e:
+        logger.warning(f"Failed to parse {resource.url}: {e}")
 
-    return {"news_items": news_items}
+    return {"fetched_items": news_items}
+
+
+def collect_news(
+    remaining_resources_to_process: list[NewsResource],
+    fetched_items: list[NewsItem] | None,
+    no_resources_to_process: bool,
+    config: dict,
+) -> dict:
+    if no_resources_to_process:
+        return {"is_done": True, "news_items": []}
+    return {
+        "is_done": len(remaining_resources_to_process) == 0,
+        "news_items": fetched_items or [],
+    }
 
 
 def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
