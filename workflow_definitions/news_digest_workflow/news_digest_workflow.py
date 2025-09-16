@@ -67,7 +67,7 @@ def fetch_news(resource: NewsResource, config: dict) -> dict:
     reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
     start_date = datetime.utcnow() - timedelta(days=days_back)
-    start_date = start_date.replace(tzinfo=timezone.utc)
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
     end_date = datetime.utcnow() + timedelta(days=1)
     end_date = end_date.replace(tzinfo=timezone.utc)
     news_items: list[NewsItem] = []
