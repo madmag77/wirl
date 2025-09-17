@@ -8,8 +8,20 @@ const BASE_URL = API_BASE_URL
  * @returns {Promise<WorkflowHistory[]>}
  */
 export async function getWorkflows() {
-  const resp = await fetch(`${BASE_URL}/workflows`)
-  return resp.json()
+  try {
+    console.log('Fetching workflows from:', `${BASE_URL}/workflows`)
+    const resp = await fetch(`${BASE_URL}/workflows`)
+    console.log('Response status:', resp.status, resp.statusText)
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+    }
+    const data = await resp.json()
+    console.log('Parsed JSON data:', data)
+    return data
+  } catch (error) {
+    console.error('Error fetching workflows:', error)
+    throw error
+  }
 }
 
 /**
@@ -41,7 +53,7 @@ export async function startWorkflow(template, query) {
   const resp = await fetch(`${BASE_URL}/workflows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ template_name: template, query })
+    body: JSON.stringify({ template_name: template, inputs: { query } })
   })
   return resp.json()
 }
@@ -56,7 +68,7 @@ export async function continueWorkflow(id, answer) {
   const resp = await fetch(`${BASE_URL}/workflows/${id}/continue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: answer })
+    body: JSON.stringify({ inputs: { answer } })
   })
   return resp.json()
 }

@@ -39,48 +39,55 @@ export default function App() {
     }
   }, [])
 
-  const refreshWorkflows = useCallback(async () => {
+  const refreshWorkflows = useCallback(async (fetchDetails = false) => {
     const list = await getWorkflows()
-    if (!isMountedRef.current) {
-      return []
-    }
-
     setWorkflows(list)
 
-    const detailEntries = await Promise.all(
-      list.map(async workflow => {
-        try {
-          const detail = await getWorkflow(workflow.id)
-          return [workflow.id, detail]
-        } catch (error) {
-          console.error('Failed to fetch workflow detail', error)
-          return null
-        }
-      })
-    )
+    // Only fetch details when explicitly requested or for new workflows
+    if (fetchDetails) {
+      const detailEntries = await Promise.all(
+        list.map(async workflow => {
+          try {
+            // Only fetch if we don't have details or workflow is running
+            if (!workflowDetailsRef.current[workflow.id] || workflow.status === 'running') {
+              const detail = await getWorkflow(workflow.id)
+              return [workflow.id, detail]
+            }
+            return [workflow.id, workflowDetailsRef.current[workflow.id]]
+          } catch (error) {
+            console.error('Failed to fetch workflow detail', error)
+            return null
+          }
+        })
+      )
 
-    if (!isMountedRef.current) {
-      return list
-    }
-
-    const nextDetails = {}
-    for (const workflow of list) {
-      const detailEntry = detailEntries.find(entry => entry && entry[0] === workflow.id)
-      if (detailEntry) {
-        nextDetails[workflow.id] = detailEntry[1]
-      } else if (workflowDetailsRef.current[workflow.id]) {
-        nextDetails[workflow.id] = workflowDetailsRef.current[workflow.id]
+      if (!isMountedRef.current) {
+        return list
       }
+
+      const nextDetails = {}
+      for (const workflow of list) {
+        const detailEntry = detailEntries.find(entry => entry && entry[0] === workflow.id)
+        if (detailEntry) {
+          nextDetails[workflow.id] = detailEntry[1]
+        } else if (workflowDetailsRef.current[workflow.id]) {
+          nextDetails[workflow.id] = workflowDetailsRef.current[workflow.id]
+        }
+      }
+
+      workflowDetailsRef.current = nextDetails
+      setWorkflowDetails(nextDetails)
     }
 
-    workflowDetailsRef.current = nextDetails
-    setWorkflowDetails(nextDetails)
     return list
   }, [])
 
   useEffect(() => {
-    const load = async () => {
-      const data = await refreshWorkflows()
+    let intervalId
+    let timeoutId
+
+    const load = async (fetchDetails = false) => {
+      const data = await refreshWorkflows(fetchDetails)
       setSelectedId(current => {
         if (current && data.some(item => item.id === current)) {
           return current
@@ -90,11 +97,40 @@ export default function App() {
         }
         return null
       })
+      return data
     }
 
-    load()
-    const id = startPolling(load, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
+    const setupPolling = async () => {
+      // Clear any existing timers
+      if (intervalId) clearInterval(intervalId)
+      if (timeoutId) clearTimeout(timeoutId)
+
+      const data = await load(true) // Fetch details on initial load
+      const hasRunningWorkflows = data.some(workflow => workflow.status === 'running')
+
+      if (hasRunningWorkflows) {
+        intervalId = startPolling(async () => {
+          const updatedData = await load(false) // Don't fetch details on every poll
+          const stillHasRunning = updatedData.some(workflow => workflow.status === 'running')
+          if (!stillHasRunning) {
+            clearInterval(intervalId)
+            intervalId = null
+            // Schedule next check
+            timeoutId = setTimeout(setupPolling, POLL_INTERVAL_MS * 5)
+          }
+        }, POLL_INTERVAL_MS)
+      } else {
+        // If no running workflows, check again after a longer delay
+        timeoutId = setTimeout(setupPolling, POLL_INTERVAL_MS * 5)
+      }
+    }
+
+    setupPolling()
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [refreshWorkflows])
 
   useEffect(() => {
@@ -118,17 +154,20 @@ export default function App() {
       return
     }
 
-    getWorkflow(selectedId).then(data => {
-      workflowDetailsRef.current = {
-        ...workflowDetailsRef.current,
-        [data.id]: data
-      }
-      setWorkflowDetails(current => ({
-        ...current,
-        [data.id]: data
-      }))
-      setSelected(data)
-    })
+    // Only fetch if we don't have the detail already
+    if (!workflowDetailsRef.current[selectedId]) {
+      getWorkflow(selectedId).then(data => {
+        workflowDetailsRef.current = {
+          ...workflowDetailsRef.current,
+          [data.id]: data
+        }
+        setWorkflowDetails(current => ({
+          ...current,
+          [data.id]: data
+        }))
+        setSelected(data)
+      })
+    }
   }, [selectedId, workflowDetails])
 
   useEffect(() => {
@@ -237,22 +276,6 @@ export default function App() {
     return date.toLocaleString()
   }
 
-  const formatErrorPreview = error => {
-    if (!error) return '—'
-    return error.length > 120 ? `${error.slice(0, 117)}…` : error
-  }
-
-  const formatInputsPreview = inputs => {
-    if (!inputs || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
-      return '—'
-    }
-    try {
-      const text = JSON.stringify(inputs)
-      return text.length > 80 ? `${text.slice(0, 77)}…` : text
-    } catch (error) {
-      return '—'
-    }
-  }
 
   const openDetailsModal = id => {
     setExpandedSections({ inputs: true, results: true, error: true })
@@ -296,6 +319,9 @@ export default function App() {
     return bTime - aTime
   })
 
+  console.log('Current workflows state:', workflows)
+  console.log('Sorted workflows for table:', sortedWorkflows)
+
   const getDetailForRow = id => workflowDetails[id] ?? null
 
   const getCreatedAtForSelected = () => {
@@ -322,15 +348,13 @@ export default function App() {
                 <th scope="col">Date &amp; Time</th>
                 <th scope="col">Workflow</th>
                 <th scope="col">Status</th>
-                <th scope="col">Error</th>
-                <th scope="col">Inputs</th>
                 <th scope="col" className="actions-header">Actions</th>
               </tr>
             </thead>
             <tbody>
               {sortedWorkflows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="empty-state">No workflow runs yet. Start a workflow to see it here.</td>
+                  <td colSpan={4} className="empty-state">No workflow runs yet. Start a workflow to see it here.</td>
                 </tr>
               ) : (
                 sortedWorkflows.map(workflow => {
@@ -348,10 +372,6 @@ export default function App() {
                         <span className={`status-pill status-${workflow.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>
                           {workflow.status}
                         </span>
-                      </td>
-                      <td className="error-preview">{formatErrorPreview(detail?.error)}</td>
-                      <td className="inputs-preview">
-                        <span className="monospace">{formatInputsPreview(detail?.inputs)}</span>
                       </td>
                       <td className="actions-cell">
                         {workflow.status === 'failed' && (
