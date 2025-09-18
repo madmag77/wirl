@@ -1,0 +1,104 @@
+workflow PhotoNotesWorkflow {
+
+  metadata {
+    description: "Extract useful text from recent photos and save to Obsidian note"
+    owner: "assistant"
+    version: "1.0"
+  }
+
+  inputs {
+    String obsidian_folder_path
+  }
+
+  outputs {
+    String notes_file_path = SaveNotes.notes_file_path
+  }
+
+  node GetPhotos {
+    call get_photos
+    inputs {
+    }
+    const {
+      export_path: "~/Exports"
+    }
+    outputs {
+      List<String> file_paths
+    }
+  }
+
+  cycle NotesLoop {
+    inputs {
+      List<String> initial_file_paths_to_process = GetPhotos.file_paths
+      List<String> remaining_file_paths_to_process = ReadPhoto.remaining_file_paths
+    }
+    outputs {
+      List<String> notes = CheckAllPhotosProcessed.notes
+    }
+
+    node ReadPhoto {
+      call read_photo
+      inputs {
+        List<String> file_paths = NotesLoop.remaining_file_paths_to_process?
+        List<String> initial_file_paths_to_process = NotesLoop.initial_file_paths_to_process
+      }
+      outputs {
+        T<Image> image
+        String file_path
+        List<String> remaining_file_paths
+        Bool no_files_to_process
+      }
+    }
+
+    node ExtractNote {
+      call extract_note
+      inputs {
+        T<Image> image = ReadPhoto.image
+      }
+      const {
+        model: "gemma3:12b"
+        base_url: "http://localhost:11434/v1/"
+        temperature: 0
+      }
+      outputs {
+        String note
+      }
+    }
+
+    node CheckAllPhotosProcessed {
+      call check_all_photos_processed
+      inputs {
+        List<String> remaining_file_paths_to_process = ReadPhoto.remaining_file_paths?
+        String note = ExtractNote.note?
+        Bool no_files_to_process = ReadPhoto.no_files_to_process?
+      }
+      when {
+        ReadPhoto.no_files_to_process or ExtractNote.note
+      }
+      outputs {
+        Bool is_done
+        (append) List<String> notes
+      }
+    }
+
+    guard {
+      inputs {
+        Bool is_done = CheckAllPhotosProcessed.is_done
+      }
+      when {
+        CheckAllPhotosProcessed.is_done
+      }
+    }
+    max_iterations: 10
+  }
+
+  node SaveNotes {
+    call save_notes
+    inputs {
+      List<String> notes = NotesLoop.notes
+      String obsidian_folder_path = obsidian_folder_path
+    }
+    outputs {
+      String notes_file_path
+    }
+  }
+}
