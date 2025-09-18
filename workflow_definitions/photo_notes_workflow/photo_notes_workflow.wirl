@@ -17,6 +17,7 @@ workflow PhotoNotesWorkflow {
   node GetPhotos {
     call get_photos
     inputs {
+      String obsidian_folder_path = obsidian_folder_path
     }
     const {
       export_path: "~/Exports"

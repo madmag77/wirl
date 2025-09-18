@@ -1,12 +1,20 @@
 import os
 import subprocess
 import base64
+import shutil
 from io import BytesIO
 from datetime import datetime, timedelta
 import logging
 from pydantic import BaseModel, Field
 from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
+
+# Register HEIF opener with Pillow
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    logger.warning("pillow-heif not available, HEIC images will not be supported")
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +23,14 @@ class Note(BaseModel):
     text: str = Field(description="Information extracted from the photo")
 
 
-def get_photos(config: dict) -> dict:
+def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     export_path = os.path.expanduser(config.get("export_path", "~/Exports"))
+    
+    # Clean the export folder before exporting to avoid duplicates
+    if os.path.exists(export_path):
+        shutil.rmtree(export_path)
     os.makedirs(export_path, exist_ok=True)
+    
     from_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     subprocess.run([
         "osxphotos",
@@ -25,6 +38,7 @@ def get_photos(config: dict) -> dict:
         export_path,
         "--from-date",
         from_date,
+        "--update",  # Use update flag to avoid interactive prompt
     ], check=True)
     file_paths = [
         os.path.join(export_path, f)
