@@ -7,43 +7,82 @@ workflow NewsDigestWorkflow {
   }
 
   inputs {
-    String trigger
+    List<T<NewsResource>> resources
   }
 
   outputs {
     String summary = SummarizeNews.summary
   }
 
-  node GetResources {
-    call get_resources
+  cycle FetchLoop {
     inputs {
-      String trigger = trigger
+      List<T<NewsResource>> initial_resources_to_process = resources
+      List<T<NewsResource>> remaining_resources_to_process = GetNextResource.remaining_resources
     }
     outputs {
-      List<T<NewsResource>> resources
+      List<T<NewsItem>> news_items = CollectNews.news_items
     }
-  }
 
-  node FetchNews {
-    call fetch_news
-    inputs {
-      List<T<NewsResource>> resources = GetResources.resources
+    node GetNextResource {
+      call get_next_resource
+      inputs {
+        List<T<NewsResource>> resources = FetchLoop.remaining_resources_to_process?
+        List<T<NewsResource>> initial_resources_to_process = FetchLoop.initial_resources_to_process
+      }
+      outputs {
+        NewsResource resource
+        List<T<NewsResource>> remaining_resources
+        Bool no_resources_to_process
+      }
     }
-    const {
-      days_back: 1
-      model: "qwen3:8b"
-      reasoning: True
-      temperature: 0
+
+    node FetchNews {
+      call fetch_news
+      inputs {
+        NewsResource resource = GetNextResource.resource
+      }
+      const {
+        days_back: 1
+        model: "qwen3:8b"
+        reasoning: True
+        temperature: 0
+      }
+      outputs {
+        List<T<NewsItem>> fetched_items
+      }
     }
-    outputs {
-      List<T<NewsItem>> news_items
+
+    node CollectNews {
+      call collect_news
+      inputs {
+        List<T<NewsResource>> remaining_resources_to_process = GetNextResource.remaining_resources?
+        List<T<NewsItem>> fetched_items = FetchNews.fetched_items?
+        Bool no_resources_to_process = GetNextResource.no_resources_to_process?
+      }
+      when {
+        GetNextResource.no_resources_to_process or FetchNews.fetched_items
+      }
+      outputs {
+        Bool is_done
+        (append) List<T<NewsItem>> news_items
+      }
     }
+
+    guard {
+      inputs {
+        Bool is_done = CollectNews.is_done
+      }
+      when {
+        CollectNews.is_done
+      }
+    }
+    max_iterations: 10
   }
 
   node SummarizeNews {
     call summarize_news
     inputs {
-      List<T<NewsItem>> news_items = FetchNews.news_items
+      List<T<NewsItem>> news_items = FetchLoop.news_items
     }
     const {
       model: "gpt-oss:20b"
@@ -61,7 +100,7 @@ workflow NewsDigestWorkflow {
       String summary = SummarizeNews.summary
     }
     const {
-      type: "telegram"
+      type: "email"
     }
     outputs {
       Bool success

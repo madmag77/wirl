@@ -1,13 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { cancelWorkflow as apiCancel, continueWorkflow as apiContinue, startWorkflow as apiStart, getWorkflow, getWorkflows, getWorkflowTemplates } from './api.js'
+import {
+  cancelWorkflow as apiCancel,
+  continueWorkflow as apiContinue,
+  startWorkflow as apiStart,
+  getWorkflow,
+  getWorkflows,
+  getWorkflowTemplates,
+  retryWorkflow as apiRetry
+} from './api.js'
 import { POLL_INTERVAL_MS } from './constants.js'
 import { startPolling } from './timer.js'
 
 export default function App() {
   const [workflows, setWorkflows] = useState([])
+  const [workflowDetails, setWorkflowDetails] = useState({})
   const [selectedId, setSelectedId] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showInterrupt, setShowInterrupt] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     inputs: true,
@@ -18,24 +28,110 @@ export default function App() {
   const [showStartModal, setShowStartModal] = useState(false)
   const [newTemplate, setNewTemplate] = useState('')
   const [newQuery, setNewQuery] = useState('')
+  const [answer, setAnswer] = useState('')
+
+  const workflowDetailsRef = useRef({})
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
-    const fetchList = () => {
-      getWorkflows().then(data => {
-        setWorkflows(data)
-        setSelectedId(current => {
-          if (current === null && data.length > 0) {
-            return data[0].id
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const refreshWorkflows = useCallback(async (fetchDetails = false) => {
+    const list = await getWorkflows()
+    setWorkflows(list)
+
+    // Only fetch details when explicitly requested or for new workflows
+    if (fetchDetails) {
+      const detailEntries = await Promise.all(
+        list.map(async workflow => {
+          try {
+            // Only fetch if we don't have details or workflow is running
+            if (!workflowDetailsRef.current[workflow.id] || workflow.status === 'running') {
+              const detail = await getWorkflow(workflow.id)
+              return [workflow.id, detail]
+            }
+            return [workflow.id, workflowDetailsRef.current[workflow.id]]
+          } catch (error) {
+            console.error('Failed to fetch workflow detail', error)
+            return null
           }
-          return current
         })
-      })
+      )
+
+      if (!isMountedRef.current) {
+        return list
+      }
+
+      const nextDetails = {}
+      for (const workflow of list) {
+        const detailEntry = detailEntries.find(entry => entry && entry[0] === workflow.id)
+        if (detailEntry) {
+          nextDetails[workflow.id] = detailEntry[1]
+        } else if (workflowDetailsRef.current[workflow.id]) {
+          nextDetails[workflow.id] = workflowDetailsRef.current[workflow.id]
+        }
+      }
+
+      workflowDetailsRef.current = nextDetails
+      setWorkflowDetails(nextDetails)
     }
 
-    fetchList()
-    const id = startPolling(fetchList, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
+    return list
   }, [])
+
+  useEffect(() => {
+    let intervalId
+    let timeoutId
+
+    const load = async (fetchDetails = false) => {
+      const data = await refreshWorkflows(fetchDetails)
+      setSelectedId(current => {
+        if (current && data.some(item => item.id === current)) {
+          return current
+        }
+        if (data.length > 0) {
+          return data[0].id
+        }
+        return null
+      })
+      return data
+    }
+
+    const setupPolling = async () => {
+      // Clear any existing timers
+      if (intervalId) clearInterval(intervalId)
+      if (timeoutId) clearTimeout(timeoutId)
+
+      const data = await load(true) // Fetch details on initial load
+      const hasRunningWorkflows = data.some(workflow => workflow.status === 'running')
+
+      if (hasRunningWorkflows) {
+        intervalId = startPolling(async () => {
+          const updatedData = await load(false) // Don't fetch details on every poll
+          const stillHasRunning = updatedData.some(workflow => workflow.status === 'running')
+          if (!stillHasRunning) {
+            clearInterval(intervalId)
+            intervalId = null
+            // Schedule next check
+            timeoutId = setTimeout(setupPolling, POLL_INTERVAL_MS * 5)
+          }
+        }, POLL_INTERVAL_MS)
+      } else {
+        // If no running workflows, check again after a longer delay
+        timeoutId = setTimeout(setupPolling, POLL_INTERVAL_MS * 5)
+      }
+    }
+
+    setupPolling()
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [refreshWorkflows])
 
   useEffect(() => {
     getWorkflowTemplates().then(data => {
@@ -47,16 +143,48 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId) {
+      setSelected(null)
+      return
+    }
 
-    getWorkflow(selectedId).then(setSelected)
-  }, [selectedId])
+    const detail = workflowDetails[selectedId]
+    if (detail) {
+      setSelected(detail)
+      return
+    }
+
+    // Only fetch if we don't have the detail already
+    if (!workflowDetailsRef.current[selectedId]) {
+      getWorkflow(selectedId).then(data => {
+        workflowDetailsRef.current = {
+          ...workflowDetailsRef.current,
+          [data.id]: data
+        }
+        setWorkflowDetails(current => ({
+          ...current,
+          [data.id]: data
+        }))
+        setSelected(data)
+      })
+    }
+  }, [selectedId, workflowDetails])
 
   useEffect(() => {
     if (!selectedId || selected?.status !== 'running') return
 
     const fetchSelected = () => {
-      getWorkflow(selectedId).then(setSelected)
+      getWorkflow(selectedId).then(data => {
+        workflowDetailsRef.current = {
+          ...workflowDetailsRef.current,
+          [data.id]: data
+        }
+        setWorkflowDetails(current => ({
+          ...current,
+          [data.id]: data
+        }))
+        setSelected(data)
+      })
     }
 
     const id = startPolling(fetchSelected, POLL_INTERVAL_MS)
@@ -82,177 +210,194 @@ export default function App() {
   const confirmStartWorkflow = async () => {
     setShowStartModal(false)
     const data = await apiStart(newTemplate, newQuery)
-    setWorkflows([...workflows, { id: data.id, template: newTemplate, status: data.status }])
     setSelectedId(data.id)
-    setSelected(data)
+    setShowDetailsModal(true)
+    await refreshWorkflows()
   }
 
   const cancelStartWorkflow = () => {
     setShowStartModal(false)
   }
 
-  const continueWorkflow = async answer => {
-    const data = await apiContinue(selectedId, answer)
-    setWorkflows(workflows.map(w => (w.id === selectedId ? { ...w, status: data.status } : w)))
-    setSelected(data)
+  const continueWorkflow = async answerValue => {
+    if (!selectedId) return
+
+    const data = await apiContinue(selectedId, answerValue)
+    setWorkflows(prev => prev.map(w => (w.id === selectedId ? { ...w, status: data.status } : w)))
+    setSelected(current => (current ? { ...current, status: data.status, result: data.result ?? current.result } : data))
+    setWorkflowDetails(current => {
+      const next = {
+        ...current,
+        [selectedId]: {
+          ...(current[selectedId] ?? {}),
+          status: data.status,
+          result: data.result ?? current[selectedId]?.result ?? {}
+        }
+      }
+      workflowDetailsRef.current = next
+      return next
+    })
     setShowInterrupt(false)
   }
 
   const cancelRunningWorkflow = async () => {
+    if (!selectedId) return
+
     const data = await apiCancel(selectedId)
-    setWorkflows(workflows.map(w => (w.id === selectedId ? { ...w, status: data.status } : w)))
-    setSelected(data)
+    setWorkflows(prev => prev.map(w => (w.id === selectedId ? { ...w, status: data.status } : w)))
+    setSelected(current => (current ? { ...current, status: data.status, result: data.result ?? current.result } : data))
+    setWorkflowDetails(current => {
+      const next = {
+        ...current,
+        [selectedId]: {
+          ...(current[selectedId] ?? {}),
+          status: data.status,
+          result: data.result ?? current[selectedId]?.result ?? {}
+        }
+      }
+      workflowDetailsRef.current = next
+      return next
+    })
   }
 
-  const toggleSection = (section) => {
+  const toggleSection = section => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
     }))
   }
 
-  const [answer, setAnswer] = useState('')
+  const formatDateTime = value => {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return date.toLocaleString()
+  }
+
+
+  const openDetailsModal = id => {
+    setExpandedSections({ inputs: true, results: true, error: true })
+    setSelectedId(id)
+    setShowDetailsModal(true)
+    if (!workflowDetails[id]) {
+      getWorkflow(id).then(data => {
+        workflowDetailsRef.current = {
+          ...workflowDetailsRef.current,
+          [data.id]: data
+        }
+        setWorkflowDetails(current => ({
+          ...current,
+          [data.id]: data
+        }))
+        setSelected(data)
+      })
+    }
+  }
+
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false)
+    setShowInterrupt(false)
+    setAnswer('')
+  }
+
+  const handleRetry = async id => {
+    try {
+      await apiRetry(id)
+      await refreshWorkflows()
+      setSelectedId(id)
+      setShowDetailsModal(true)
+    } catch (error) {
+      console.error('Failed to continue workflow', error)
+    }
+  }
+
+  const sortedWorkflows = [...workflows].sort((a, b) => {
+    const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0
+    const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0
+    return bTime - aTime
+  })
+
+  console.log('Current workflows state:', workflows)
+  console.log('Sorted workflows for table:', sortedWorkflows)
+
+  const getDetailForRow = id => workflowDetails[id] ?? null
+
+  const getCreatedAtForSelected = () => {
+    const current = workflows.find(item => item.id === selected?.id)
+    return current?.created_at
+  }
+
   const interrupt = selected?.result?.__interrupt__?.[0]
 
-  // No need to extract specific workflow fields - just show inputs and results as per WorkflowDetail model
-
   return (
-    <div className="container">
-      <aside className="sidebar">
-        <h2>Workflows</h2>
-        <ul className="workflow-list">
-          {workflows.map(w => (
-            <li
-              key={w.id}
-              onClick={() => setSelectedId(w.id)}
-              className={w.id === selectedId ? 'selected' : ''}
-            >
-              <span className="title">{w.template}</span>
-              <span className={`state state-${w.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>{w.status}</span>
-            </li>
-          ))}
-        </ul>
-        <button className="new-workflow" onClick={openStartModal}>Start New Workflow</button>
-      </aside>
-      <main className="content">
-        {selected ? (
-          <>
-            <div className="workflow-header">
-              <h2>{selected.template}</h2>
-              <span className={`status-badge status-${selected.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>
-                {selected.status}
-              </span>
-              {selected.status === 'running' && (
-                <button className="cancel-btn" onClick={cancelRunningWorkflow}>Cancel Workflow</button>
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="header-titles">
+          <h1>Workflow Runs</h1>
+          <p className="subtitle">Track, inspect, and relaunch your workflows from a single view.</p>
+        </div>
+        <button className="primary-btn" onClick={openStartModal}>Start New Workflow</button>
+      </header>
+      <main className="app-main">
+        <div className="table-card">
+          <table className="workflow-table" role="table">
+            <thead>
+              <tr>
+                <th scope="col">Date &amp; Time</th>
+                <th scope="col">Workflow</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="actions-header">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedWorkflows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="empty-state">No workflow runs yet. Start a workflow to see it here.</td>
+                </tr>
+              ) : (
+                sortedWorkflows.map(workflow => {
+                  const detail = getDetailForRow(workflow.id)
+                  return (
+                    <tr
+                      key={workflow.id}
+                      className="workflow-row"
+                      onClick={() => openDetailsModal(workflow.id)}
+                      data-testid={`workflow-row-${workflow.id}`}
+                    >
+                      <td>{formatDateTime(workflow.created_at)}</td>
+                      <td>{detail?.template ?? workflow.template}</td>
+                      <td>
+                        <span className={`status-pill status-${workflow.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>
+                          {workflow.status}
+                        </span>
+                      </td>
+                      <td className="actions-cell">
+                        {workflow.status === 'failed' && (
+                          <button
+                            className="table-continue-btn"
+                            onClick={event => {
+                              event.stopPropagation()
+                              handleRetry(workflow.id)
+                            }}
+                          >
+                            Continue
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
-            </div>
-
-            {showInterrupt && interrupt ? (
-              <div className="interrupt-section">
-                <h3>🤔 Questions</h3>
-                <div className="questions-list">
-                  {interrupt.value.questions.map((question, idx) => (
-                    <p key={idx} className="question">{question}</p>
-                  ))}
-                </div>
-                <div className="answer-input">
-                  <input
-                    value={answer}
-                    onChange={e => setAnswer(e.target.value)}
-                    placeholder="Enter your answer..."
-                    className="answer-field"
-                  />
-                  <button
-                    onClick={() => { continueWorkflow(answer); setAnswer(''); }}
-                    className="continue-btn"
-                  >
-                    Continue
-                  </button>
-                  <button
-                    onClick={() => { setShowInterrupt(false); setAnswer(''); }}
-                    className="cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : selected ? (
-              <div className="workflow-result">
-                {/* Inputs */}
-                {selected.inputs && typeof selected.inputs === 'object' && selected.inputs !== null && Object.keys(selected.inputs).length > 0 && (
-                  <div className="result-section">
-                    <div
-                      className="section-header"
-                      onClick={() => toggleSection('inputs')}
-                    >
-                      <h3>📥 Inputs</h3>
-                      <span className="toggle-icon">
-                        {expandedSections.inputs ? '▼' : '▶'}
-                      </span>
-                    </div>
-                    {expandedSections.inputs && (
-                      <div className="section-content">
-                        <pre className="workflow-data">{JSON.stringify(selected.inputs, null, 2)}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Results */}
-                {selected.result && typeof selected.result === 'object' && selected.result !== null && Object.keys(selected.result).length > 0 && (
-                  <div className="result-section">
-                    <div
-                      className="section-header"
-                      onClick={() => toggleSection('results')}
-                    >
-                      <h3>📤 Results</h3>
-                      <span className="toggle-icon">
-                        {expandedSections.results ? '▼' : '▶'}
-                      </span>
-                    </div>
-                    {expandedSections.results && (
-                      <div className="section-content">
-                        <pre className="workflow-data">{JSON.stringify(selected.result, null, 2)}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Error */}
-                {selected.error && typeof selected.error === 'string' && selected.error.trim() !== '' && (
-                  <div className="result-section">
-                    <div
-                      className="section-header"
-                      onClick={() => toggleSection('error')}
-                    >
-                      <h3>❌ Error</h3>
-                      <span className="toggle-icon">
-                        {expandedSections.error ? '▼' : '▶'}
-                      </span>
-                    </div>
-                    {expandedSections.error && (
-                      <div className="section-content">
-                        <pre className="error-data">{selected.error}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="no-result">
-                <p>No result data available</p>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="no-selection">
-            <p>Select a workflow to see details</p>
-          </div>
-        )}
+            </tbody>
+          </table>
+        </div>
       </main>
+
       {showStartModal && (
-        <div className="modal-overlay">
-          <div className="modal">
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal start-modal">
             <h3>Start Workflow</h3>
             <select data-testid="template-select" value={newTemplate} onChange={e => setNewTemplate(e.target.value)}>
               {templates.map(t => (
@@ -268,6 +413,112 @@ export default function App() {
               <button className="cancel-btn" onClick={cancelStartWorkflow}>Cancel</button>
               <button className="start-btn" onClick={confirmStartWorkflow}>Start</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showDetailsModal && selected && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={closeDetailsModal}>
+          <div className="modal detail-modal" onClick={event => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>{selected.template}</h3>
+                <p className="modal-subtitle">Detailed run information</p>
+              </div>
+              <button className="icon-btn" onClick={closeDetailsModal} aria-label="Close details">×</button>
+            </div>
+
+            <div className="detail-grid">
+              <div className="detail-grid-item">
+                <span className="label">Run ID</span>
+                <span className="value monospace">{selected.id}</span>
+              </div>
+              <div className="detail-grid-item">
+                <span className="label">Status</span>
+                <span className={`status-pill status-${selected.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>
+                  {selected.status}
+                </span>
+              </div>
+              <div className="detail-grid-item">
+                <span className="label">Started</span>
+                <span className="value">{formatDateTime(getCreatedAtForSelected())}</span>
+              </div>
+            </div>
+
+            {selected.inputs && typeof selected.inputs === 'object' && Object.keys(selected.inputs).length > 0 && (
+              <div className="detail-section">
+                <div className="section-header" onClick={() => toggleSection('inputs')}>
+                  <h4>Inputs</h4>
+                  <span className="toggle-icon">{expandedSections.inputs ? '▼' : '▶'}</span>
+                </div>
+                {expandedSections.inputs && (
+                  <pre className="detail-pre">{JSON.stringify(selected.inputs, null, 2)}</pre>
+                )}
+              </div>
+            )}
+
+            {selected.result && typeof selected.result === 'object' && Object.keys(selected.result).length > 0 && (
+              <div className="detail-section">
+                <div className="section-header" onClick={() => toggleSection('results')}>
+                  <h4>Results</h4>
+                  <span className="toggle-icon">{expandedSections.results ? '▼' : '▶'}</span>
+                </div>
+                {expandedSections.results && (
+                  <pre className="detail-pre">{JSON.stringify(selected.result, null, 2)}</pre>
+                )}
+              </div>
+            )}
+
+            {selected.error && (
+              <div className="detail-section">
+                <div className="section-header" onClick={() => toggleSection('error')}>
+                  <h4>Error</h4>
+                  <span className="toggle-icon">{expandedSections.error ? '▼' : '▶'}</span>
+                </div>
+                {expandedSections.error && (
+                  <pre className="detail-pre error-data">{selected.error}</pre>
+                )}
+              </div>
+            )}
+
+            {selected.status === 'running' && (
+              <div className="detail-actions">
+                <button className="cancel-btn" onClick={cancelRunningWorkflow}>Cancel Workflow</button>
+              </div>
+            )}
+
+            {showInterrupt && interrupt && (
+              <div className="interrupt-section">
+                <h3>Questions</h3>
+                <div className="questions-list">
+                  {interrupt.value.questions.map((question, idx) => (
+                    <p key={idx} className="question">{question}</p>
+                  ))}
+                </div>
+                <div className="answer-input">
+                  <input
+                    value={answer}
+                    onChange={e => setAnswer(e.target.value)}
+                    placeholder="Enter your answer..."
+                    className="answer-field"
+                  />
+                  <div className="answer-actions">
+                    <button
+                      onClick={() => { continueWorkflow(answer); setAnswer('') }}
+                      className="continue-btn"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      onClick={() => { setShowInterrupt(false); setAnswer('') }}
+                      className="cancel-btn"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

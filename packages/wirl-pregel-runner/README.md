@@ -74,6 +74,33 @@ See how functions are wired and assertions made in:
 - `tests/test_simple_wirl_runner.py`
 - `tests/test_wirl_with_cycles_runner.py`
 
+### When Block Evaluation
+
+The Pregel runner evaluates `when` blocks with special truthiness rules:
+
+- **False conditions**: Only `None` or explicit `False` evaluate to false
+- **True conditions**: All other values evaluate to true, including:
+  - Empty containers: `[]`, `{}`, `""`
+  - Zero values: `0`, `0.0`
+  - Objects with undefined types (e.g., custom classes not in scope)
+
+This means expressions like `None or [CustomType(...)]` will evaluate to `true` even if `CustomType` is not defined in the evaluation context, as long as the actual data exists in the workflow state.
+
+**Example:**
+```wirl
+node ProcessData {
+  when {
+    SomeNode.results  // True even if results is [] or contains undefined types
+  }
+}
+
+node SkipIfNone {
+  when {
+    SomeNode.optional_data  // False only if None or explicit False
+  }
+}
+```
+
 ## 5) License
 
 MIT — see root `LICENSE`.

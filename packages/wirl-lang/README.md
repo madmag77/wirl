@@ -162,6 +162,42 @@ workflow PaperRenameWorkflow {
 - All values are immutable; `(append)` outputs accumulate across iterations/paths.
 - Guarded loops model Pregel-style supersteps; parallelism can be expressed with multiple nodes eligible in the same step. A `parallel` block may be added in the future.
 
+### When Block Evaluation Rules
+
+The `when` blocks use special truthiness evaluation that differs from standard Python boolean logic:
+
+- **False conditions**: Only `None` or explicit `False` evaluate to false
+- **True conditions**: All other values evaluate to true, including:
+  - Empty containers: `[]`, `{}`, `""`
+  - Zero values: `0`, `0.0`
+  - Objects with custom types not defined in the evaluation context
+
+This design ensures that:
+1. Only explicit absence (`None`) or negation (`False`) prevents node execution
+2. Empty results from previous nodes don't block subsequent processing
+3. Type definitions don't need to be available during condition evaluation
+
+**Examples:**
+```wirl
+node ProcessIfResults {
+  when {
+    DataLoader.items  // True even if items is []
+  }
+}
+
+node SkipIfDisabled {
+  when {
+    Config.enabled  // False only if None or explicit False
+  }
+}
+
+node HandleCustomObjects {
+  when {
+    Parser.objects  // True even if objects contains undefined types
+  }
+}
+```
+
 ## Local development
 
 - Edit the grammar in `grammar/wirl.bnf` and the transformer in `grammar/wirl_parser.py`.

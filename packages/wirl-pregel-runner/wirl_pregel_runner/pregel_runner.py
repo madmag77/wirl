@@ -45,17 +45,25 @@ if __name__ == "__main__":
             if "=" not in p:
                 raise ValueError(f"Invalid param: {p}")
             k, v = p.split("=", 1)
-            if v.isdigit():
+            
+            # Try to parse as JSON first (handles lists, dicts, booleans, null)
+            if v.startswith(('[', '{')) or v in ('true', 'false', 'null'):
+                try:
+                    v = json.loads(v)
+                except json.JSONDecodeError:
+                    pass  # Fall through to other parsing methods
+            # Try integer parsing
+            elif v.isdigit():
                 v = int(v)
+            # Try float parsing
             else:
                 try:
                     v = float(v)
                 except ValueError:
-                    pass
+                    pass  # Keep as string
+            
             out[k] = v
         return out
 
     params = parse_params(args.param)
     result = run_workflow(args.workflow_path, fn_map, params, args.thread_id, args.resume)
-
-
