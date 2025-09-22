@@ -19,19 +19,16 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class Note(BaseModel):
-    text: str = Field(description="Information extracted from the photo")
-
-
 def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     export_path = os.path.expanduser(config.get("export_path", "~/Exports"))
-    
+    days_back = config.get("days_back", 1)
+
     # Clean the export folder before exporting to avoid duplicates
     if os.path.exists(export_path):
         shutil.rmtree(export_path)
     os.makedirs(export_path, exist_ok=True)
     
-    from_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
     subprocess.run([
         "osxphotos",
         "export",
@@ -78,20 +75,31 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
         temperature=temperature,
         api_key="sk",
     )
-    structured_llm = vision_llm.with_structured_output(Note, method="json_mode")
 
     content = [
         {
             "type": "text",
-            "text": "Extract any useful text, phone numbers, quotes, or warnings from this image. If nothing useful, return empty text.",
+            "text": """
+              Firstly, classify the phot into the one of the following classes: 
+                1. Casual photo of people, buildings or nature.
+                2. Photo of a product, food, or any other type of object close-up.
+                3. Photo of a document, receipt, ticket, or any other type of document. 
+                4. Screenshot of a text message, email, webpage, or any other type of screenshot.
+                
+                If the photo is of the class 1 return just a class of the photo without any other text.
+                
+                For the class 2, describe the object in details including all the texts on it. 
+                For the class 3, describe the document and extract all the text from it trying to preserve formatting and layout. 
+                For the class 4, describe the screenshot and extract all the text from it trying to preserve formatting and layout. 
+            """,
         },
         {
             "type": "image_url",
             "image_url": {"url": f"data:image/jpeg;base64,{encode_image(image)}"},
         },
     ]
-    note = structured_llm.invoke([{"role": "user", "content": content}])
-    return {"note": note.text}
+    response = vision_llm.invoke([{"role": "user", "content": content}])
+    return {"note": response.content}
 
 
 def check_all_photos_processed(
@@ -115,7 +123,9 @@ def save_notes(notes: list[str], obsidian_folder_path: str, config: dict) -> dic
         obsidian_folder_path, f"note_from_photos_{date_str}.md"
     )
     with open(note_path, "a", encoding="utf-8") as f:
-        for n in notes:
+        for i, n in enumerate(notes):
             if n:
-                f.write(f"- {n}\n")
+                f.write(f"# Photo{i+1}\n")
+                f.write(n)
+                f.write("\n\n")
     return {"notes_file_path": note_path}

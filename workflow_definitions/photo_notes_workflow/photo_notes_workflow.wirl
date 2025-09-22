@@ -21,6 +21,7 @@ workflow PhotoNotesWorkflow {
     }
     const {
       export_path: "~/Exports"
+      days_back: 1
     }
     outputs {
       List<String> file_paths
@@ -89,7 +90,7 @@ workflow PhotoNotesWorkflow {
         CheckAllPhotosProcessed.is_done
       }
     }
-    max_iterations: 10
+    max_iterations: 30
   }
 
   node SaveNotes {
