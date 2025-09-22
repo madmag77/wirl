@@ -16,7 +16,7 @@ def run_workflow(workflow_path: str,
                  checkpointer: Any | None = None,
                  ):
     app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer)
-    config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
+    config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
     if resume:
         resume_val = json.loads(resume)
         result = app.invoke(Command(resume=resume_val), config)
