@@ -182,8 +182,9 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         try:
             update = func(**inputs, config = metadata) or {}
         except Exception as e:
-            logger.error(f"Error in {node.call}: {e}")
-            raise e
+            error_msg = f"Error in {node.call}: {e}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
         update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
         return update_with_node_name
 

@@ -53,7 +53,7 @@ export async function startWorkflow(template, query) {
   const resp = await fetch(`${BASE_URL}/workflows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ template_name: template, inputs: { query } })
+    body: JSON.stringify({ template_name: template, inputs: JSON.parse(query) })
   })
   return resp.json()
 }

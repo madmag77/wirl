@@ -1,5 +1,4 @@
 import os
-import subprocess
 import base64
 import shutil
 from io import BytesIO
@@ -8,6 +7,7 @@ import logging
 from pydantic import BaseModel, Field
 from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
+import osxphotos
 
 # Register HEIF opener with Pillow
 try:
@@ -28,20 +28,25 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
         shutil.rmtree(export_path)
     os.makedirs(export_path, exist_ok=True)
     
-    from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-    subprocess.run([
-        "osxphotos",
-        "export",
-        export_path,
-        "--from-date",
-        from_date,
-        "--update",  # Use update flag to avoid interactive prompt
-    ], check=True)
-    file_paths = [
-        os.path.join(export_path, f)
-        for f in os.listdir(export_path)
-        if f.lower().endswith((".png", ".jpg", ".jpeg", ".heic"))
-    ]
+    from_date = (datetime.now() - timedelta(days=days_back)).date()
+    
+    photosdb = osxphotos.PhotosDB()
+    photos = photosdb.photos(from_date=from_date)
+    
+    file_paths = []
+    for photo in photos:
+        if photo.ismissing or photo.intrash:
+            continue
+        
+        try:
+            exported = photo.export(export_path)
+            if exported:
+                file_paths.extend(exported)
+        except Exception as e:
+            logger.warning(f"Failed to export photo {photo.uuid}: {e}")
+            continue
+    
+    logger.info(f"Exported {len(file_paths)} photos to {export_path}")
     return {"file_paths": file_paths}
 
 
