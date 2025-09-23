@@ -28,7 +28,7 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
         shutil.rmtree(export_path)
     os.makedirs(export_path, exist_ok=True)
     
-    from_date = (datetime.now() - timedelta(days=days_back)).date()
+    from_date = datetime.now() - timedelta(days=days_back)
     
     photosdb = osxphotos.PhotosDB()
     photos = photosdb.photos(from_date=from_date)
