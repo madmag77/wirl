@@ -37,13 +37,16 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     
     file_paths = []
     for photo in photos:
-        if photo.ismissing or photo.intrash:
+        # Skip only photos in trash, but allow missing photos (iCloud optimized)
+        if photo.intrash:
             continue
         
         try:
-            exported = photo.export(export_path)
+            # Use Photos app export for missing photos (iCloud optimized photos and screenshots)
+            exported = photo.export(export_path, use_photos_export=True, timeout=60)
             if exported:
                 file_paths.extend(exported)
+                logger.debug(f"Successfully exported: {photo.filename}")
         except Exception as e:
             logger.warning(f"Failed to export photo {photo.uuid}: {e}")
             continue
@@ -80,7 +83,7 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
         model=llm_model,
         base_url=base_url,
         temperature=temperature,
-        api_key=None,
+        api_key="sk",
     )
 
     content = [
@@ -97,7 +100,7 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
                 
                 For the class 2, describe the object in details including all the texts on it. 
                 For the class 3, describe the document and extract all the text from it trying to preserve formatting and layout. 
-                For the class 4, describe the screenshot and extract all the text from it trying to preserve formatting and layout. 
+                For the class 4, describe the important information from the screenshot and extract all the text from it trying to preserve formatting and layout. Don't describe colors or background, just the important information.  
             """,
         },
         {
