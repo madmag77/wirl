@@ -9,6 +9,8 @@ from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
 import osxphotos
 
+logger = logging.getLogger(__name__)
+
 # Register HEIF opener with Pillow
 try:
     from pillow_heif import register_heif_opener
@@ -71,14 +73,14 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
         img.save(byte_arr, format="JPEG")
         return base64.b64encode(byte_arr.getvalue()).decode("utf-8")
 
-    llm_model = config.get("model")
+    llm_model = config.get("model", "gemma3:12b")
     base_url = config.get("base_url")
     temperature = config.get("temperature", 0)
     vision_llm = ChatOpenAI(
         model=llm_model,
         base_url=base_url,
         temperature=temperature,
-        api_key="sk",
+        api_key=None,
     )
 
     content = [

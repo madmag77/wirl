@@ -5,18 +5,19 @@ import json
 import re
 from typing import Any, Dict, List, Set
 import argparse
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from wirl_pregel_runner.pregel_graph_builder import build_pregel_graph
 
 def run_workflow(workflow_path: str,
-                 fn_map=None,
+                 fn_map: Dict[str, Any],
                  params: Dict[str, Any] | None = None,
                  thread_id: str | None = None,
                  resume: str | None = None,
                  checkpointer: Any | None = None,
                  ):
     app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer)
-    config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
     if resume:
         resume_val = json.loads(resume)
         result = app.invoke(Command(resume=resume_val), config)

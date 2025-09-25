@@ -6,6 +6,7 @@ import argparse
 from langgraph.types import Command
 from langgraph.channels import LastValue, BinaryOperatorAggregate
 from langgraph.pregel import Pregel
+from langchain_core.runnables import RunnableConfig, RunnableLambda
 from wirl_lang import (
     parse_wirl_to_objects,
     NodeClass,
@@ -17,6 +18,7 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite, ChannelWriteTupleEntry
 import operator
 import logging
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +81,8 @@ def _eval_condition(expr: str, state: Dict[str, Any]) -> bool:
         # Empty containers like [], {}, "", 0 should evaluate to True
         return result is not None and result is not False
     except (NameError, AttributeError) as e:
-        # If we can't evaluate due to missing names/attributes, return True
-        # This handles cases where types are not defined but values exist
-        return True
+        # If we can't evaluate due to missing names/attributes, return False 
+        return False
 
 def extract_dependencies(inputs: List, workflow_inputs: Set[str]) -> Set[str]:
     """Extract node dependencies from input assignments"""
@@ -116,7 +117,7 @@ def extract_in_cycle_dependencies(inputs: List, cycle_inputs: Set[str], cycle_st
     return dependencies
 
 def make_cycle_guard_pregel_node(cycle: CycleClass, iteration_key: str, all_in_cycle_outputs: set[str]):
-    def cycle_guard(task_input: dict) -> dict:
+    def cycle_guard(task_input: dict) -> dict | None:
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in cycle.guard.inputs if inp.default_value is not None and not inp.optional)
         if not all_inputs_available:
@@ -127,7 +128,7 @@ def make_cycle_guard_pregel_node(cycle: CycleClass, iteration_key: str, all_in_c
         if _eval_condition(cycle.guard.when, task_input) or count >= cycle.max_iterations - 1:
             # Prepare the output of the cycle block
             for out in cycle.outputs:
-                val = _eval_value(out.default_value, task_input)
+                val = _eval_value(out.default_value or "", task_input)
                 update[cycle.name + "." + out.name] = val
             # And finish the cycle
             return update
@@ -136,7 +137,7 @@ def make_cycle_guard_pregel_node(cycle: CycleClass, iteration_key: str, all_in_c
         update[iteration_key] = 1
         return update
 
-    triggers = [inp.default_value for inp in cycle.guard.inputs if inp.target_node_name is not None]
+    triggers = [inp.default_value for inp in cycle.guard.inputs if inp.target_node_name is not None and inp.default_value is not None]
     return create_pregel_node_from_params(fn=cycle_guard, 
                                           channels=triggers+[iteration_key]+list(all_in_cycle_outputs), 
                                           triggers=triggers)
@@ -169,7 +170,7 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
     if not callable(func):
         raise ValueError(f"Function '{node.call}' not provided")
     metadata = {constant.name: constant.value for constant in node.constants}
-    def task(task_input: dict) -> dict:
+    def task(task_input: dict) -> dict | None:
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in node.inputs if not inp.optional and inp.default_value is not None)
         if not all_inputs_available:
@@ -190,7 +191,7 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
 
     return task
 
-def create_pregel_node_from_params(fn: callable, channels: List[str], triggers: List[str]):
+def create_pregel_node_from_params(fn: Callable, channels: List[str], triggers: List[str]):
     def update_mapper(x):
         if x is None:
             return None
@@ -205,7 +206,7 @@ def create_pregel_node_from_params(fn: callable, channels: List[str], triggers: 
             tags=[],
             metadata={},
             writers=[ChannelWrite([ChannelWriteTupleEntry(mapper=update_mapper)])],
-            bound=fn,
+            bound=RunnableLambda(fn),
             retry_policy=[],
             cache_policy=None,
         )
@@ -276,7 +277,7 @@ def build_pregel_graph(path: str, functions: Dict[str, Any], checkpointer: Any |
             # Add cycle start node
             nodes[cycle_start_name] = create_cycle_start_pregel_node(node, 
                                                                      iteration_key, 
-                                                                     cycle_nodes_outputs_to_clean, 
+                                                                     list(cycle_nodes_outputs_to_clean), 
                                                                      in_cycle_node_output_names)
             
             # Extract dependencies for the cycle
@@ -288,7 +289,7 @@ def build_pregel_graph(path: str, functions: Dict[str, Any], checkpointer: Any |
                                        [node.name + "." + out.name for out in node.outputs]
             nodes_outputs = []
             for cycle_node in node.nodes:
-                deps = extract_in_cycle_dependencies(cycle_node.inputs, cycle_inputs_and_outputs, cycle_start_name)
+                deps = extract_in_cycle_dependencies(cycle_node.inputs, set(cycle_inputs_and_outputs), cycle_start_name)
                 node_dependencies[cycle_node.name] = deps
                 nodes[cycle_node.name] = create_pregel_node(cycle_node, fn_map)
                 nodes_outputs.extend([cycle_node.name + "." + out.name for out in cycle_node.outputs])
@@ -311,8 +312,8 @@ def build_pregel_graph(path: str, functions: Dict[str, Any], checkpointer: Any |
     app = Pregel(
         nodes=nodes,
         channels=field_names,
-        input_channels=workflow_inputs,
-        output_channels=[out.default_value for out in workflow.outputs]+cycle_iteration_keys,
+        input_channels=list(workflow_inputs),
+        output_channels=[out.default_value for out in workflow.outputs if out.default_value is not None]+cycle_iteration_keys,
     )
 
     return app

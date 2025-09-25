@@ -1,0 +1,27 @@
+{
+    "include": [
+        "packages",
+        "workflow_definitions",
+        "apps"
+    ],
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        "**/.*"
+    ],
+    "extraPaths": [
+        "./packages/wirl-lang",
+        "./packages/wirl-pregel-runner",
+        "./workflow_definitions",
+        "./apps/backend",
+        "./apps/workers"
+    ],
+    "venvPath": ".",
+    "venv": ".venv",
+    "pythonVersion": "3.11",
+    "typeCheckingMode": "basic",
+    "useLibraryCodeForTypes": true,
+    "autoImportCompletions": true,
+    "autoSearchPaths": true,
+    "stubPath": ".venv/lib/python*/site-packages"
+}
