@@ -42,8 +42,7 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
             continue
         
         try:
-            # Use Photos app export for missing photos (iCloud optimized photos and screenshots)
-            exported = photo.export(export_path, use_photos_export=True, timeout=60)
+            exported = photo.export(export_path, timeout=60)
             if exported:
                 file_paths.extend(exported)
                 logger.debug(f"Successfully exported: {photo.filename}")
@@ -96,8 +95,7 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
                 3. Photo of a document, receipt, ticket, or any other type of document. 
                 4. Screenshot of a text message, email, webpage, or any other type of screenshot.
                 
-                If the photo is of the class 1 return just a class of the photo without any other text.
-                
+                For the class 1, describe the photo.
                 For the class 2, describe the object in details including all the texts on it. 
                 For the class 3, describe the document and extract all the text from it trying to preserve formatting and layout. 
                 For the class 4, describe the important information from the screenshot and extract all the text from it trying to preserve formatting and layout. Don't describe colors or background, just the important information.  

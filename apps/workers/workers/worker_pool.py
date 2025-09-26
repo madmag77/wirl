@@ -9,6 +9,7 @@ dotenv.load_dotenv()
 from workers.db import claim_job, run_wirl, set_state
 
 CONCURRENCY = int(os.getenv("WORKERS", 4))
+TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT_MINUTES", 20)) * 60  # Convert minutes to seconds
 
 
 async def worker(pool: asyncpg.pool.Pool, wid: str) -> None:
@@ -18,8 +19,16 @@ async def worker(pool: asyncpg.pool.Pool, wid: str) -> None:
             await asyncio.sleep(10)
             continue
         try:
-            new_state, result = await run_wirl(job)
+            # Run the workflow with timeout
+            new_state, result = await asyncio.wait_for(
+                run_wirl(job), 
+                timeout=TASK_TIMEOUT
+            )
             await set_state(pool, job["id"], new_state, result=result)
+        except asyncio.TimeoutError:
+            # Task timed out - mark as failed
+            timeout_msg = f"Task timed out after {TASK_TIMEOUT // 60} minutes"
+            await set_state(pool, job["id"], "failed", error=timeout_msg)
         except Exception as exc:  # pragma: no cover - errors in worker
             await set_state(pool, job["id"], "failed", error=str(exc))
 
