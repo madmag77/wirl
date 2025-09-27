@@ -93,10 +93,32 @@ workflow PhotoNotesWorkflow {
     max_iterations: 30
   }
 
+  hitl AgreeWithUser {
+    request_type = email
+    timeout = 2h
+    inputs {
+      List<String> notes = NotesLoop.notes
+    }
+    outputs {
+      String comments_from_user
+    }
+  }
+
+  node ApplyUserComments {
+    call apply_user_comments
+    inputs {
+      List<String> notes = NotesLoop.notes
+      String comments_from_user = AgreeWithUser.comments_from_user
+    }
+    outputs {
+      List<String> notes_to_save
+    }
+  }
+
   node SaveNotes {
     call save_notes
     inputs {
-      List<String> notes = NotesLoop.notes
+      List<String> notes = ApplyUserComments.notes_to_save
       String obsidian_folder_path = obsidian_folder_path
     }
     outputs {
