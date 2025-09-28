@@ -93,9 +93,17 @@ workflow PhotoNotesWorkflow {
     max_iterations: 30
   }
 
-  hitl AgreeWithUser {
-    request_type = email
-    timeout = 2h
+  node AgreeWithUser {
+    call agree_with_user
+    const {
+      subject: "Photo Notes Workflow"
+      body: "Please review the following notes and provide any comments or corrections"
+      frontend_url: "http://localhost:3000/hitl"
+    }
+    hitl {
+      correlation: "default"
+      timeout: "24h"
+    }
     inputs {
       List<String> notes = NotesLoop.notes
     }

@@ -3,7 +3,7 @@ import json
 import re
 from typing import Any, Dict, List, Set
 import argparse
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 from langgraph.channels import LastValue, BinaryOperatorAggregate
 from langgraph.pregel import Pregel
 from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -171,11 +171,13 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         raise ValueError(f"Function '{node.call}' not provided")
     metadata = {constant.name: constant.value for constant in node.constants}
     def task(task_input: dict) -> dict | None:
+        # Check if all inputs are available
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in node.inputs if not inp.optional and inp.default_value is not None)
         if not all_inputs_available:
             return None
-    
+        
+        # Check if the "when" condition is met
         if node.when and not _eval_condition(node.when, task_input):
             return None
         
@@ -187,6 +189,8 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
         update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
+        if node.hitl:
+            answer = interrupt({"request": json.dumps(inputs)})
         return update_with_node_name
 
     return task
