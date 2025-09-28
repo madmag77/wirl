@@ -181,7 +181,7 @@ class ASTBuilder(Transformer):
         default_value = items[2 + reducer_offset] if len(items) > 2 + reducer_offset else None
         optional = items[3 + reducer_offset] if len(items) > 3 + reducer_offset else False
 
-        return Output(reducer=reducer, type=type_name, name=name, default_value=default_value, optional=optional)
+        return Output(reducer=reducer or Reducer.LAST, type=type_name, name=name, default_value=default_value, optional=optional)
 
     def param_value(self, items):
         return items[0]
@@ -259,7 +259,7 @@ class ASTBuilder(Transformer):
         return cycle
 
     def cycle_body(self, items):
-        res = {"inputs": [], "outputs": [], "nodes": []}
+        res: dict[str, Any] = {"inputs": [], "outputs": [], "nodes": []}
         for it in items:
             if isinstance(it, NodeClass):
                 res["nodes"].append(it)

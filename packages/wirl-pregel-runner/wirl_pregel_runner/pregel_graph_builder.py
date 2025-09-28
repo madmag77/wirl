@@ -318,6 +318,7 @@ def build_pregel_graph(path: str, functions: Dict[str, Any], checkpointer: Any |
         channels=field_names,
         input_channels=list(workflow_inputs),
         output_channels=[out.default_value for out in workflow.outputs if out.default_value is not None]+cycle_iteration_keys,
+        checkpointer=checkpointer,
     )
 
     return app

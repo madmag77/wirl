@@ -85,17 +85,3 @@ export async function cancelWorkflow(id) {
   return resp.json()
 }
 
-/**
- * Retry a failed workflow run.
- * @param {string} id
- * @returns {Promise<WorkflowResponse>}
- */
-export async function retryWorkflow(id) {
-  const resp = await fetch(`${BASE_URL}/workflows/${id}/retry`, {
-    method: 'POST'
-  })
-  if (!resp.ok) {
-    throw new Error('Failed to retry workflow')
-  }
-  return resp.json()
-}

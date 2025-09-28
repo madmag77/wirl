@@ -6,9 +6,12 @@ from pathlib import Path
 
 import asyncpg
 from langgraph.checkpoint.postgres import PostgresSaver
+import logging
 
 from wirl_pregel_runner import run_workflow
 from workers.workflow_loader import get_template
+
+logger = logging.getLogger(__name__)
 
 async def claim_job(pool: asyncpg.pool.Pool, worker_id: str) -> Dict[str, Any] | None:
     async with pool.acquire() as conn, conn.transaction():
@@ -71,8 +74,10 @@ async def run_wirl(job: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
         raise ValueError("Template not found")
     params = json.loads(job.get("inputs", "{}"))
     resume = job.get("resume_payload")
-    if resume:
+    # Resume after interrupt or after continue failed job
+    if resume or job.get("attempt", 0) > 1:
         params = None
+        logger.info(f"Resuming job {job['id']} with params {params}")
     # Convert absolute path to relative module path
     workflow_path = tpl["path"]
 
@@ -81,16 +86,22 @@ async def run_wirl(job: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
     
     mod = __import__(functions_module, fromlist=["*"])
     fn_map = {k: getattr(mod, k) for k in dir(mod) if not k.startswith("_")}
-    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as saver:
-        saver.setup()
-        result = await asyncio.to_thread(
-            run_workflow,
-            tpl["path"],
-            fn_map=fn_map,
-            params=params,
-            thread_id=job["id"],
-            resume=resume,
-            checkpointer=saver,
-        )
+    db_url = os.environ.get("DATABASE_URL")
+    if not isinstance(db_url, str) or not db_url:
+        raise RuntimeError("DATABASE_URL is not set")
+    def _run_in_thread():
+        # Create the saver and its DB connection inside the worker thread
+        with PostgresSaver.from_conn_string(db_url) as saver:
+            saver.setup()
+            return run_workflow(
+                tpl["path"],
+                fn_map=fn_map,
+                params=params,
+                thread_id=job["id"],
+                resume=resume,
+                checkpointer=saver,
+            )
+
+    result = await asyncio.to_thread(_run_in_thread)
     state = "needs_input" if "__interrupt__" in result else "succeeded"
     return state, result

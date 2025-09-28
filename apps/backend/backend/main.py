@@ -4,7 +4,7 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 import dotenv
 dotenv.load_dotenv()
@@ -52,7 +52,7 @@ class WorkflowDetail(BaseModel):
     inputs: dict
     template: str
     status: WorkflowStatus
-    result: dict
+    result: dict[str, Any]
     error: Optional[str] = None
 
 
@@ -104,7 +104,7 @@ def workflows_history(db: Session = Depends(get_session)) -> list[WorkflowHistor
         WorkflowHistory(
             id=r.id,
             template=r.graph_name,
-            status=r.state,
+            status=WorkflowStatus(r.state),
             created_at=str(r.created_at),
         )
         for r in runs
@@ -118,10 +118,10 @@ def workflow_detail(workflow_run_id: str, db: Session = Depends(get_session)) ->
         raise HTTPException(404, "Workflow not found")
     return WorkflowDetail(
         id=run.id,
-        inputs=run.inputs,
+        inputs=run.inputs or {},
         template=run.graph_name,
-        status=run.state,
-        result=run.result,
+        status=WorkflowStatus(run.state),
+        result=run.result or {},
         error=run.error,
     )
 
@@ -146,7 +146,7 @@ def start_workflow(
     db.add(run)
     db.commit()
     db.refresh(run)
-    return WorkflowResponse(id=run.id, status=run.state, result={})
+    return WorkflowResponse(id=run.id, status=WorkflowStatus(run.state), result={})
 
 
 @app.post("/workflows/{workflow_run_id}/continue", operation_id="continueWorkflow")
@@ -158,11 +158,12 @@ def continue_workflow(
     run = db.get(WorkflowRun, workflow_run_id)
     if not run:
         raise HTTPException(404, "Workflow not found")
-    if run.state == WorkflowStatus.CANCELED:
-        raise HTTPException(400, "Workflow was canceled")
-    if run.state != WorkflowStatus.NEEDS_INPUT:
-        raise HTTPException(400, "Workflow not waiting for input")
-    run.resume_payload = json.dumps({"answer": request.inputs})
+    if run.state != WorkflowStatus.NEEDS_INPUT and run.state != WorkflowStatus.FAILED:
+        raise HTTPException(400, "Workflow can't be continued")
+    
+    if run.state == WorkflowStatus.NEEDS_INPUT:
+        run.resume_payload = json.dumps({"answer": request.inputs})
+    
     run.state = WorkflowStatus.QUEUED
     db.commit()
     db.refresh(run)

@@ -7,7 +7,6 @@ import {
   getWorkflow,
   getWorkflows,
   getWorkflowTemplates,
-  retryWorkflow as apiRetry
 } from './api.js'
 import { POLL_INTERVAL_MS } from './constants.js'
 import { startPolling } from './timer.js'
@@ -304,7 +303,7 @@ export default function App() {
 
   const handleRetry = async id => {
     try {
-      await apiRetry(id)
+      await apiContinue(id, null)
       await refreshWorkflows()
       setSelectedId(id)
       setShowDetailsModal(true)
