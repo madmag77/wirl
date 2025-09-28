@@ -22,7 +22,7 @@ def run_workflow(workflow_path: str,
         resume_val = json.loads(resume)
         result = app.invoke(Command(resume=resume_val), config)
     else:
-        result = app.invoke(params or {}, config)
+        result = app.invoke(params, config)
     return result
 
 

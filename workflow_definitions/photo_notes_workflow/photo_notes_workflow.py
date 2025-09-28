@@ -3,18 +3,51 @@ import base64
 from io import BytesIO
 from datetime import datetime
 import logging
-from pydantic import BaseModel, Field
 from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
 # Register HEIF opener with Pillow
-try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
-except ImportError:
-    logger.warning("pillow-heif not available, HEIC images will not be supported")
+from pillow_heif import register_heif_opener
+register_heif_opener()
+
+# Workaround for langgraph checkpoint serialization error
+# https://github.com/langchain-ai/langgraph/issues/4956#issuecomment-3135374853
+from typing import Any
+
+from langgraph.checkpoint.serde import jsonplus
+from langgraph.checkpoint.serde.jsonplus import _msgpack_default
+from langgraph.checkpoint.serde.jsonplus import _option
+from langgraph.checkpoint.serde.jsonplus import ormsgpack
+
+
+def message_to_dict(msg):
+    """
+    Recursively convert a message or object into a dict/str (safe for serialization).
+    """
+    # Handles HumanMessage, AIMessage, ToolMessage, etc.
+    if hasattr(msg, "to_dict"):
+        return msg.to_dict()
+    elif isinstance(msg, dict):
+        # Recursively convert dict values
+        return {k: message_to_dict(v) for k, v in msg.items()}
+    elif isinstance(msg, (list, tuple)):
+        # Recursively convert each item
+        return [message_to_dict(x) for x in msg]
+    elif isinstance(msg, (str, int, float, bool, type(None))):
+        return msg
+    else:
+        # Fallback: try to extract content and role
+        print("Serialization Fallback, type:", type(msg))
+        print(msg)
+        return {"role": getattr(msg, "role", "user"), "content": str(getattr(msg, "content", msg))}
+
+
+def _msgpack_enc(data: Any) -> bytes:
+    return ormsgpack.packb(message_to_dict(data), default=_msgpack_default, option=_option)
+
+setattr(jsonplus, "_msgpack_enc", _msgpack_enc)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +61,7 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     # Read all image files from the export directory
     file_paths = []
     supported_extensions = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.tiff', '.tif', '.bmp', '.gif'}
-    
+
     try:
         for filename in os.listdir(export_path):
             file_path = os.path.join(export_path, filename)
