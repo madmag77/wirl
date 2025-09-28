@@ -118,3 +118,19 @@ get_telegram_chat_id:
 		exit 1; \
 	fi; \
 	curl "https://api.telegram.org/bot$$TELEGRAM_BOT_TOKEN/getUpdates" | jq '.result[0].message.chat.id'
+
+#
+# Repository-wide tests
+#
+.PHONY: test test-python-packages test-workflows
+
+# Run all tests (Python packages, workflows, and frontend)
+test: test-python-packages test-all-workflows
+	@echo "All tests completed"
+
+# Python package tests (ensures dev deps like pytest are installed)
+test-python-packages:
+	$(MAKE) -C $(ROOT)/packages/wirl-pregel-runner test PY=$(PY)
+
+# Alias for clarity (reuses existing target)
+test-workflows: test-all-workflows
