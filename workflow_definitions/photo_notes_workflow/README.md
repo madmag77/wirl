@@ -4,62 +4,91 @@ A WIRL workflow that automatically extracts useful text and information from rec
 
 ## ⚠️ macOS Only
 
-**This workflow is designed exclusively for macOS users** and requires the native macOS Photos app integration through the `osxphotos` library.
+**This workflow is designed exclusively for macOS users** and requires macOS Shortcuts app for photo export automation.
 
 ## What It Does
 
 The Photo Notes Workflow:
 
-1. **Exports recent photos** from your macOS Photos library (last 24 hours by default)
-2. **Analyzes each photo** using AI vision to classify and extract information:
+1. **Automatically exports recent photos** using macOS Shortcuts (scheduled daily at 5 AM)
+2. **Reads exported photos** from a designated folder (~/Exports by default)
+3. **Analyzes each photo** using AI vision to classify and extract information:
    - **Casual photos**: Simply classifies the image type
    - **Product/Object photos**: Detailed descriptions including any visible text
    - **Document photos**: Extracts all text while preserving formatting
    - **Screenshots**: Extracts text content from screenshots
-3. **Saves extracted notes** to an Obsidian markdown file with timestamp
+4. **Saves extracted notes** to an Obsidian markdown file with timestamp
 
 ## Prerequisites
 
 ### System Requirements
-- **macOS** (required for Photos app integration)
+- **macOS** (required for Shortcuts app integration)
 - **Python 3.11+**
-- **Full Disk Access** permission for Terminal/your IDE
 - **Local LLM server** (Ollama with Gemma3:12b model by default)
 
 ### Required Permissions
 
-#### Full Disk Access Setup
-This workflow requires Full Disk Access to read your Photos library:
+#### Shortcuts App Permissions
+The Shortcuts automation requires Photos access:
 
-1. Open **System Preferences** → **Security & Privacy** → **Privacy**
-2. Select **Full Disk Access** from the left panel
-3. Click the lock icon and enter your password
-4. Click the **+** button and add:
-   - **Terminal** (if running from command line)
-   - **Your IDE** (VS Code, Cursor, etc. if running from IDE)
-   - **Python** executable (usually `/usr/bin/python3` or your virtual environment python)
+1. Open **System Settings** → **Privacy & Security** → **Photos**
+2. Enable **Shortcuts** in the list
+3. If Shortcuts isn't listed, run the shortcut once manually to trigger the permission prompt
 
-#### Photos Access
-The workflow will request Photos access the first time it runs. Grant permission when prompted.
+#### Advanced Shortcuts Settings
+Enable automation capabilities in Shortcuts:
+
+1. Open **Shortcuts** app
+2. Go to **Settings** (gear icon in top-right)
+3. Click **Advanced** tab
+4. Enable all checkboxes:
+   - ✅ **Allow Running Scripts**
+   - ✅ **Allow Sharing Large Amounts of Data**
+   - ✅ **Allow Deleting Without Confirmation**
+   - ✅ **Allow Deleting Large Amounts of Data**
 
 ## Installation
 
-### 1. Install osxphotos
+### 1. Create Shortcuts Automation
 
-The workflow requires the `osxphotos` library for Photos app integration:
+Create a Shortcuts automation to export photos daily:
 
-```bash
-# Option 1: Install via pip (recommended)
-pip install osxphotos
+1. **Open Shortcuts app**
+2. **Create new shortcut** named "Export daily photos"
+3. **Add the following actions in order:**
+   - **Get Contents of** → Select "Exports" folder (create ~/Exports folder first)
+   - **Delete** → "Folder Contents" (clears previous exports)
+   - **Find Photos** where "Date Taken is in the last 1 day"
+   - **Save Photos** to "Exports" folder
+   - **Stop and Output** → "Do Nothing"
 
-# Option 2: Install via homebrew
-brew install osxphotos
+4. **Test the shortcut** manually first to ensure it works
 
-# Verify installation
-osxphotos --version
-```
+### 2. Set Up Daily Automation
 
-### 2. Install Workflow Dependencies
+Set up the shortcut to run automatically at 5 AM daily:
+
+1. **Copy the launchd plist file:**
+   ```bash
+   cp workflow_definitions/photo_notes_workflow/infra/com.local.daily-photo-export.plist ~/Library/LaunchAgents/
+   ```
+
+2. **Load the automation:**
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.local.daily-photo-export.plist
+   ```
+
+3. **Test the automation immediately (optional):**
+   ```bash
+   launchctl start com.local.daily-photo-export
+   ```
+
+4. **Check automation status:**
+   ```bash
+   launchctl list | grep daily-photo-export
+   ```
+
+### 3. Install Workflow Dependencies
 
 From the WIRL repository root:
 
@@ -68,7 +97,7 @@ From the WIRL repository root:
 make workflows-setup
 ```
 
-### 3. Set Up Local LLM (Ollama)
+### 4. Set Up Local LLM (Ollama)
 
 The workflow uses a local LLM for image analysis:
 
@@ -120,10 +149,10 @@ python -m wirl_pregel_runner.pregel_runner \
 
 ### Default Settings
 
-The workflow is configured with these defaults in the WIRL file:
+The workflow is configured with these defaults:
 
-- **Export path**: `~/Exports` (temporary folder for photo exports)
-- **Date range**: Last 24 hours of photos
+- **Export path**: `~/Exports` (folder where Shortcuts saves photos)
+- **Shortcuts schedule**: Daily at 5:00 AM
 - **AI Model**: `gemma3:12b` 
 - **LLM Server**: `http://localhost:11434/v1/` (local Ollama)
 - **Temperature**: `0` (deterministic responses)
@@ -143,9 +172,23 @@ node ExtractNote {
 }
 ```
 
-### Changing the Date Range
+### Changing the Export Schedule
 
-To modify how many days back to look for photos, edit the `photo_notes_workflow.wirl` file:
+To modify when photos are exported, edit the plist file before loading:
+
+```xml
+<key>StartCalendarInterval</key>
+<dict>
+    <key>Hour</key>
+    <integer>5</integer>  <!-- Change this (0-23) -->
+    <key>Minute</key>
+    <integer>0</integer>  <!-- Change this (0-59) -->
+</dict>
+```
+
+### Changing the Export Path
+
+To use a different export folder, edit the `photo_notes_workflow.wirl` file:
 
 ```wirl
 node GetPhotos {
@@ -154,14 +197,15 @@ node GetPhotos {
       String obsidian_folder_path = obsidian_folder_path
     }
     const {
-      export_path: "~/Exports"
-      days_back: 1 # Change this
+      export_path: "~/MyCustomExports"  # Change this
     }
     outputs {
       List<String> file_paths
     }
   }
 ```
+
+**Note:** Also update your Shortcuts automation to save to the same folder.
 
 ## Output
 
@@ -195,18 +239,21 @@ Email from John regarding meeting:
 
 ### Common Issues
 
-1. **"Permission denied" errors**
-   - Ensure Full Disk Access is granted (see Prerequisites)
-   - Try running with `sudo` if needed
+1. **Shortcuts automation not working**
+   - Check Shortcuts permissions in System Settings → Privacy & Security → Photos
+   - Ensure Advanced settings are enabled in Shortcuts app
+   - Test the shortcut manually first
+   - Check launchd status: `launchctl list | grep daily-photo-export`
 
-2. **"osxphotos command not found"**
-   - Install osxphotos: `pip install osxphotos`
-   - Ensure it's in your PATH
+2. **"No photos found" in workflow**
+   - Verify Shortcuts exported photos to ~/Exports folder
+   - Check that photos exist: `ls -la ~/Exports/`
+   - Test Shortcuts automation: `launchctl start com.local.daily-photo-export`
 
-3. **"No photos found"**
-   - Check that you have photos from the last 24 hours
-   - Verify Photos app permissions
-   - Try running `osxphotos list --from-date $(date -v-1d +%Y-%m-%d)` manually
+3. **Launchd automation issues**
+   - Check if plist is loaded: `launchctl list | grep daily-photo-export`
+   - View logs: `log show --predicate 'subsystem == "com.apple.launchd"' --info --last 1h | grep daily-photo-export`
+   - Reload if needed: `launchctl unload ~/Library/LaunchAgents/com.local.daily-photo-export.plist && launchctl load ~/Library/LaunchAgents/com.local.daily-photo-export.plist`
 
 4. **LLM connection errors**
    - Ensure Ollama is running: `brew services list | grep ollama`
@@ -221,8 +268,8 @@ Email from John regarding meeting:
 
 - **macOS only**: Cannot run on Windows or Linux
 - **Local LLM required**: Needs Ollama or compatible OpenAI-style API
-- **Recent photos only**: Configured for last 24 hours by default
-- **Photos app dependency**: Requires access to macOS Photos library
+- **Shortcuts dependency**: Requires macOS Shortcuts app for photo export
+- **Daily schedule**: Configured to export photos once per day at 5 AM
 - **File format support**: Limited to common image formats (JPEG, PNG, HEIC)
 
 ## Development
@@ -244,8 +291,8 @@ To change the export behavior or add filters, modify the `get_photos` function.
 
 For issues specific to this workflow, check:
 
-1. **osxphotos documentation**: https://github.com/RhetTbull/osxphotos
+1. **macOS Shortcuts documentation**: https://support.apple.com/guide/shortcuts-mac/
 2. **Ollama setup**: https://ollama.ai/
 3. **WIRL framework**: See main repository README
 
-Remember that this workflow requires specific macOS permissions and setup - ensure all prerequisites are met before troubleshooting code issues.
+Remember that this workflow requires specific macOS Shortcuts permissions and launchd setup - ensure all prerequisites are met before troubleshooting code issues.

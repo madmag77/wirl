@@ -1,7 +1,7 @@
 .PHONY: install install-dev lint format run build preview test clean
 
 # Configuration
-HOST?=localhost
+HOST?=0.0.0.0
 PORT?=3000
 
 # Node.js and npm commands

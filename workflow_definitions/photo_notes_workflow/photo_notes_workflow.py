@@ -1,13 +1,11 @@
 import os
 import base64
-import shutil
 from io import BytesIO
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from pydantic import BaseModel, Field
 from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
-import osxphotos
 
 logger = logging.getLogger(__name__)
 
@@ -23,34 +21,29 @@ logger = logging.getLogger(__name__)
 
 def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     export_path = os.path.expanduser(config.get("export_path", "~/Exports"))
-    days_back = config.get("days_back", 1)
-
-    # Clean the export folder before exporting to avoid duplicates
-    if os.path.exists(export_path):
-        shutil.rmtree(export_path)
+    
+    # Ensure export directory exists
     os.makedirs(export_path, exist_ok=True)
     
-    from_date = datetime.now() - timedelta(days=days_back)
-    
-    photosdb = osxphotos.PhotosDB()
-    photos = photosdb.photos(from_date=from_date)
-    
+    # Read all image files from the export directory
     file_paths = []
-    for photo in photos:
-        # Skip only photos in trash, but allow missing photos (iCloud optimized)
-        if photo.intrash:
-            continue
-        
-        try:
-            exported = photo.export(export_path, timeout=60)
-            if exported:
-                file_paths.extend(exported)
-                logger.debug(f"Successfully exported: {photo.filename}")
-        except Exception as e:
-            logger.warning(f"Failed to export photo {photo.uuid}: {e}")
-            continue
+    supported_extensions = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.tiff', '.tif', '.bmp', '.gif'}
     
-    logger.info(f"Exported {len(file_paths)} photos to {export_path}")
+    try:
+        for filename in os.listdir(export_path):
+            file_path = os.path.join(export_path, filename)
+            if os.path.isfile(file_path):
+                _, ext = os.path.splitext(filename.lower())
+                if ext in supported_extensions:
+                    file_paths.append(file_path)
+        
+        file_paths.sort()  # Sort for consistent processing order
+        logger.info(f"Found {len(file_paths)} image files in {export_path}")
+        
+    except Exception as e:
+        logger.error(f"Error reading files from {export_path}: {e}")
+        file_paths = []
+    
     return {"file_paths": file_paths}
 
 
