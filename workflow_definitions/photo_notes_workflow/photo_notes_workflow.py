@@ -149,6 +149,14 @@ def check_all_photos_processed(
         "notes": [note] if note else [],
     }
 
+def agree_with_user(notes: list[str], config: dict) -> dict:
+    thread_id = (config.get("configurable") or {}).get("thread_id")
+    logger.info(f"Agreeing with user for thread {thread_id}")
+
+    return {"comments_from_user": "I agree with the notes"}
+
+def apply_user_comments(notes: list[str], comments_from_user: str, config: dict) -> dict:
+    return {"notes_to_save": notes}
 
 def save_notes(notes: list[str], obsidian_folder_path: str, config: dict) -> dict:
     date_str = datetime.now().strftime("%Y-%m-%d")

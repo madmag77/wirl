@@ -170,7 +170,7 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
     if not callable(func):
         raise ValueError(f"Function '{node.call}' not provided")
     metadata = {constant.name: constant.value for constant in node.constants}
-    def task(task_input: dict) -> dict | None:
+    def task(task_input: dict, config: RunnableConfig) -> dict | None:
         # Check if all inputs are available
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in node.inputs if not inp.optional and inp.default_value is not None)
@@ -183,14 +183,15 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         
         inputs = {inp.name: task_input.get(inp.default_value, None) for inp in node.inputs}
         try:
-            update = func(**inputs, config = metadata) or {}
+            update = func(**inputs, config = metadata | config) or {}
         except Exception as e:
             error_msg = f"Error in {node.call}: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
         update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
         if node.hitl:
-            answer = interrupt({"request": json.dumps(inputs)})
+            user_answer = interrupt({"request": json.dumps(inputs)})
+            update_with_node_name[next(iter(update_with_node_name))] = user_answer
         return update_with_node_name
 
     return task
