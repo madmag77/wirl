@@ -183,7 +183,10 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         
         inputs = {inp.name: task_input.get(inp.default_value, None) for inp in node.inputs}
         try:
-            update = func(**inputs, config = metadata | config) or {}
+            # We run HITL initiating function only the first time (because otherwise langgraph will be re-running the function after each resume)
+            resume = (config.get("configurable") or {}).get("resume", None)
+            if not resume:
+                update = func(**inputs, config = metadata | config) or {}
         except Exception as e:
             error_msg = f"Error in {node.call}: {e}"
             logger.error(error_msg)

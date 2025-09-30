@@ -100,10 +100,7 @@ workflow PhotoNotesWorkflow {
       body: "Please review the following notes and provide any comments or corrections"
       frontend_url: "http://localhost:3000/hitl"
     }
-    hitl {
-      correlation: "default"
-      timeout: "24h"
-    }
+    hitl { correlation: "default", timeout: 24h }
     inputs {
       List<String> notes = NotesLoop.notes
     }

@@ -20,6 +20,7 @@ def run_workflow(workflow_path: str,
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
     if resume:
         resume_val = json.loads(resume)
+        config["configurable"]["resume"] = resume_val
         result = app.invoke(Command(resume=resume_val), config)
     else:
         result = app.invoke(params, config)
