@@ -96,9 +96,8 @@ workflow PhotoNotesWorkflow {
   node AgreeWithUser {
     call agree_with_user
     const {
-      subject: "Photo Notes Workflow"
-      body: "Please review the following notes and provide any comments or corrections"
-      frontend_url: "http://localhost:3000/hitl"
+      subject: "New notes were extracted from photos. Request for review"
+      frontend_base_url: "http://localhost:3000/hitl"
     }
     hitl { correlation: "default", timeout: 24h }
     inputs {
@@ -111,19 +110,24 @@ workflow PhotoNotesWorkflow {
 
   node ApplyUserComments {
     call apply_user_comments
+    const {
+      model: "gpt-oss:20b"
+      reasoning: False
+      temperature: 0
+    }
     inputs {
       List<String> notes = NotesLoop.notes
       String comments_from_user = AgreeWithUser.comments_from_user
     }
     outputs {
-      List<String> notes_to_save
+      String notes_to_save
     }
   }
 
   node SaveNotes {
     call save_notes
     inputs {
-      List<String> notes = ApplyUserComments.notes_to_save
+      String notes = ApplyUserComments.notes_to_save
       String obsidian_folder_path = obsidian_folder_path
     }
     outputs {

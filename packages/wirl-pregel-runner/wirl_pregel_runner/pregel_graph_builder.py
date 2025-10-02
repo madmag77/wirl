@@ -171,6 +171,7 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         raise ValueError(f"Function '{node.call}' not provided")
     metadata = {constant.name: constant.value for constant in node.constants}
     def task(task_input: dict, config: RunnableConfig) -> dict | None:
+        logger.info(f"Running {node.call} with inputs {task_input}")
         # Check if all inputs are available
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in node.inputs if not inp.optional and inp.default_value is not None)
@@ -181,20 +182,21 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
         if node.when and not _eval_condition(node.when, task_input):
             return None
         
+        update_with_node_name = {}
         inputs = {inp.name: task_input.get(inp.default_value, None) for inp in node.inputs}
         try:
             # We run HITL initiating function only the first time (because otherwise langgraph will be re-running the function after each resume)
             resume = (config.get("configurable") or {}).get("resume", None)
-            if not resume:
+            if not resume or not node.hitl:
                 update = func(**inputs, config = metadata | config) or {}
+                update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
         except Exception as e:
             error_msg = f"Error in {node.call}: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
-        update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
         if node.hitl:
             user_answer = interrupt({"request": json.dumps(inputs)})
-            update_with_node_name[next(iter(update_with_node_name))] = user_answer
+            update_with_node_name[node.name + "." + node.outputs[0].name] = user_answer
         return update_with_node_name
 
     return task
