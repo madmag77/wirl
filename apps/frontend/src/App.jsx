@@ -141,6 +141,43 @@ export default function App() {
     })
   }, [])
 
+  // Handle deep linking with thread_id query parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const threadId = params.get('thread_id')
+
+    if (threadId) {
+      // Wait a bit for workflows to load, then open the modal
+      const timer = setTimeout(() => {
+        const workflow = workflows.find(w => w.id === threadId)
+        if (workflow) {
+          openDetailsModal(threadId)
+        } else {
+          // If not in list yet, try to fetch it directly
+          getWorkflow(threadId).then(data => {
+            workflowDetailsRef.current = {
+              ...workflowDetailsRef.current,
+              [data.id]: data
+            }
+            setWorkflowDetails(current => ({
+              ...current,
+              [data.id]: data
+            }))
+            setSelectedId(threadId)
+            setShowDetailsModal(true)
+            if (data.status === 'needs_input') {
+              setShowInterrupt(true)
+            }
+          }).catch(error => {
+            console.error('Failed to fetch workflow from URL', error)
+          })
+        }
+      }, 100)
+
+      return () => clearTimeout(timer)
+    }
+  }, [workflows])
+
   useEffect(() => {
     if (!selectedId) {
       setSelected(null)
