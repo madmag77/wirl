@@ -25,6 +25,7 @@ workflow PhotoNotesWorkflow {
     }
     outputs {
       List<String> file_paths
+      Bool no_files_found
     }
   }
 
@@ -127,8 +128,12 @@ workflow PhotoNotesWorkflow {
   node SaveNotes {
     call save_notes
     inputs {
-      String notes = ApplyUserComments.notes_to_save
+      String notes = ApplyUserComments.notes_to_save?
+      Bool no_files_found = GetPhotos.no_files_found?
       String obsidian_folder_path = obsidian_folder_path
+    }
+    when {
+      GetPhotos.no_files_found or ApplyUserComments.notes_to_save
     }
     outputs {
       String notes_file_path

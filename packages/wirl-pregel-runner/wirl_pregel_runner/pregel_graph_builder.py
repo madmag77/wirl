@@ -64,16 +64,29 @@ def _eval_condition(expr: str, state: Dict[str, Any]) -> bool:
         else:
             safe_locals[key] = value
     
-    # Create objects for dotted access
+    # Create objects for dotted access with fallback to False for missing attributes
     class StateObject:
         def __init__(self, data):
             for k, v in data.items():
                 setattr(self, k, v)
+        
+        def __getattr__(self, name):
+            # Return False for any missing attribute instead of raising AttributeError
+            return False
     
     # Convert nested dicts to objects for attribute access
     for key, value in list(safe_locals.items()):
         if isinstance(value, dict):
             safe_locals[key] = StateObject(value)
+    
+    # Create a custom dict that returns a falsy StateObject for missing keys
+    class FalsyDict(dict):
+        def __missing__(self, key):
+            # Return an empty StateObject that will return False for any attribute access
+            return StateObject({})
+    
+    # Wrap safe_locals in FalsyDict to handle missing node names
+    safe_locals = FalsyDict(safe_locals)
     
     try:
         result = eval(expr, safe_globals, safe_locals)

@@ -49,7 +49,9 @@ def apply_user_comments(notes: list[str], comments_from_user: str, config: dict)
     return {"notes_to_save": f"Applied comments: {comments_from_user} to notes: {notes}"}
 
 
-def save_notes(notes: str, obsidian_folder_path: str, config: dict) -> dict:
+def save_notes(notes: str | None, no_files_found: bool | None, obsidian_folder_path: str, config: dict) -> dict:
+    if no_files_found or not notes:
+        return {"notes_file_path": "no notes to save"}
     return {"notes_file_path": "path.md"}
 
 
@@ -65,6 +67,7 @@ FN_MAP = {
 
 
 def test_photo_notes_e2e():
+    """Test the full workflow with HITL when photos are found."""
     # Create a memory checkpointer for HITL
     checkpointer = MemorySaver()
     thread_id = "test-thread-123"
@@ -82,10 +85,11 @@ def test_photo_notes_e2e():
     
     print("First run result:", result_first)
     # At this point, workflow has paused at HITL
+    assert "__interrupt__" in result_first, "Workflow should pause at HITL node"
     
     # Second run - resume with user input
     # The user response needs to be JSON-encoded as the runner expects a JSON string
-    user_response = "These notes look great, please save them!"
+    user_response = {"user_response": "These notes look great, please save them!"}
     result_final = run_workflow(
         "workflow_definitions/photo_notes_workflow/photo_notes_workflow.wirl",
         fn_map=FN_MAP,
@@ -99,3 +103,23 @@ def test_photo_notes_e2e():
     
     print("Final result:", result_final)
     assert result_final["SaveNotes.notes_file_path"] == "path.md"
+
+
+def test_photo_notes_no_files_shortcut():
+    """Test the shortcut case where no photos are found."""
+    # Custom function map for this test that returns no files
+    fn_map_no_files = FN_MAP.copy()
+    fn_map_no_files["get_photos"] = lambda config, obsidian_folder_path: {"no_files_found": True}
+    
+    result = run_workflow(
+        "workflow_definitions/photo_notes_workflow/photo_notes_workflow.wirl",
+        fn_map=fn_map_no_files,
+        params={
+            "obsidian_folder_path": "obs",
+        },
+    )
+    
+    print("No files result:", result)
+    # When no files are found, workflow should skip HITL and go directly to SaveNotes
+    assert result["SaveNotes.notes_file_path"] == "no notes to save"
+    assert "__interrupt__" not in result, "Workflow should not pause when no files found"

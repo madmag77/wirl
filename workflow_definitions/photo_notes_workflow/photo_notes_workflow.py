@@ -81,6 +81,9 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
         logger.error(f"Error reading files from {export_path}: {e}")
         file_paths = []
     
+    if len(file_paths) == 0:
+        return {"no_files_found": True}
+
     return {"file_paths": file_paths}
 
 
@@ -214,7 +217,10 @@ def apply_user_comments(notes: list[str], comments_from_user: str, config: dict)
 
     return {"notes_to_save": notes_to_save}
 
-def save_notes(notes: str, obsidian_folder_path: str, config: dict) -> dict:
+def save_notes(notes: str | None, no_files_found: bool | None, obsidian_folder_path: str, config: dict) -> dict:
+    if no_files_found or not notes:
+        return {"notes_file_path": "no notes to save"}
+    
     date_str = datetime.now().strftime("%Y-%m-%d")
     os.makedirs(obsidian_folder_path, exist_ok=True)
     note_path = os.path.join(
