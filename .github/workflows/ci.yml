@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint with Ruff
+    name: Lint with pre-commit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,15 +26,11 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv/bin/python ruff
+          uv pip install --python .venv/bin/python pre-commit
 
-      - name: Run ruff linter
+      - name: Run pre-commit hooks
         run: |
-          .venv/bin/ruff check . --output-format=github
-
-      - name: Run ruff formatter check
-        run: |
-          .venv/bin/ruff format --check .
+          .venv/bin/pre-commit run --all-files
 
   test-python-packages:
     name: Test Python Packages
@@ -60,7 +56,7 @@ jobs:
 
       - name: Run Python package tests
         run: |
-          make test-python-packages PY=.venv/bin/python
+          make test-python-packages PY=$PWD/.venv/bin/python
 
   test-workflows:
     name: Test Workflows
@@ -91,4 +87,4 @@ jobs:
 
       - name: Run workflow tests
         run: |
-          make test-all-workflows PY=.venv/bin/python
+          .venv/bin/pytest workflow_definitions -q
