@@ -3,11 +3,15 @@
 from __future__ import annotations
 import json
 import re
+import traceback
+import logging
 from typing import Any, Dict, List, Set
 import argparse
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from wirl_pregel_runner.pregel_graph_builder import build_pregel_graph
+
+logger = logging.getLogger(__name__)
 
 def run_workflow(workflow_path: str,
                  fn_map: Dict[str, Any],
@@ -16,11 +20,18 @@ def run_workflow(workflow_path: str,
                  resume: str | None = None,
                  checkpointer: Any | None = None,
                  ):
+    logger.info(f"Running workflow {workflow_path} for thread {thread_id}, with params {params}, resume {resume}")
     app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer)
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
     if resume:
         resume_val = json.loads(resume)
-        result = app.invoke(Command(resume=resume_val), config)
+        config["configurable"]["resume"] = resume_val
+        try:
+            result = app.invoke(Command(resume=resume_val), config)
+        except Exception as e:
+            stack_trace = traceback.format_exc()
+            logger.error(f"Error resuming workflow {workflow_path} for thread {thread_id}: {e}\n{stack_trace}")
+            raise e
     else:
         result = app.invoke(params, config)
     return result

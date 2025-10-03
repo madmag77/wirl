@@ -25,6 +25,7 @@ workflow PhotoNotesWorkflow {
     }
     outputs {
       List<String> file_paths
+      Bool no_files_found
     }
   }
 
@@ -93,11 +94,46 @@ workflow PhotoNotesWorkflow {
     max_iterations: 30
   }
 
+  node AgreeWithUser {
+    call agree_with_user
+    const {
+      subject: "New notes were extracted from photos. Request for review"
+      frontend_base_url: "http://localhost:3000/hitl"
+    }
+    hitl { correlation: "default", timeout: 24h }
+    inputs {
+      List<String> notes = NotesLoop.notes
+    }
+    outputs {
+      String comments_from_user
+    }
+  }
+
+  node ApplyUserComments {
+    call apply_user_comments
+    const {
+      model: "gpt-oss:20b"
+      reasoning: False
+      temperature: 0
+    }
+    inputs {
+      List<String> notes = NotesLoop.notes
+      String comments_from_user = AgreeWithUser.comments_from_user
+    }
+    outputs {
+      String notes_to_save
+    }
+  }
+
   node SaveNotes {
     call save_notes
     inputs {
-      List<String> notes = NotesLoop.notes
+      String notes = ApplyUserComments.notes_to_save?
+      Bool no_files_found = GetPhotos.no_files_found?
       String obsidian_folder_path = obsidian_folder_path
+    }
+    when {
+      GetPhotos.no_files_found or ApplyUserComments.notes_to_save
     }
     outputs {
       String notes_file_path

@@ -3,7 +3,7 @@ import json
 import re
 from typing import Any, Dict, List, Set
 import argparse
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 from langgraph.channels import LastValue, BinaryOperatorAggregate
 from langgraph.pregel import Pregel
 from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -64,16 +64,29 @@ def _eval_condition(expr: str, state: Dict[str, Any]) -> bool:
         else:
             safe_locals[key] = value
     
-    # Create objects for dotted access
+    # Create objects for dotted access with fallback to False for missing attributes
     class StateObject:
         def __init__(self, data):
             for k, v in data.items():
                 setattr(self, k, v)
+        
+        def __getattr__(self, name):
+            # Return False for any missing attribute instead of raising AttributeError
+            return False
     
     # Convert nested dicts to objects for attribute access
     for key, value in list(safe_locals.items()):
         if isinstance(value, dict):
             safe_locals[key] = StateObject(value)
+    
+    # Create a custom dict that returns a falsy StateObject for missing keys
+    class FalsyDict(dict):
+        def __missing__(self, key):
+            # Return an empty StateObject that will return False for any attribute access
+            return StateObject({})
+    
+    # Wrap safe_locals in FalsyDict to handle missing node names
+    safe_locals = FalsyDict(safe_locals)
     
     try:
         result = eval(expr, safe_globals, safe_locals)
@@ -170,23 +183,33 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
     if not callable(func):
         raise ValueError(f"Function '{node.call}' not provided")
     metadata = {constant.name: constant.value for constant in node.constants}
-    def task(task_input: dict) -> dict | None:
+    def task(task_input: dict, config: RunnableConfig) -> dict | None:
+        logger.info(f"Running {node.call} with inputs {task_input}")
+        # Check if all inputs are available
         all_inputs_available = all(task_input.get(inp.default_value) is not None 
                                    for inp in node.inputs if not inp.optional and inp.default_value is not None)
         if not all_inputs_available:
             return None
-    
+        
+        # Check if the "when" condition is met
         if node.when and not _eval_condition(node.when, task_input):
             return None
         
+        update_with_node_name = {}
         inputs = {inp.name: task_input.get(inp.default_value, None) for inp in node.inputs}
         try:
-            update = func(**inputs, config = metadata) or {}
+            # We run HITL initiating function only the first time (because otherwise langgraph will be re-running the function after each resume)
+            resume = (config.get("configurable") or {}).get("resume", None)
+            if not resume or not node.hitl:
+                update = func(**inputs, config = metadata | config) or {}
+                update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
         except Exception as e:
             error_msg = f"Error in {node.call}: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
-        update_with_node_name = {node.name + "." + k: v for k, v in update.items()}
+        if node.hitl:
+            user_answer = interrupt({"request": json.dumps(inputs)})
+            update_with_node_name[node.name + "." + node.outputs[0].name] = user_answer
         return update_with_node_name
 
     return task

@@ -5,6 +5,10 @@ from datetime import datetime
 import logging
 from PIL import Image as PILImage
 from langchain_openai import ChatOpenAI
+from email.message import EmailMessage
+import smtplib
+import markdown
+from langchain_ollama import ChatOllama
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +81,9 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
         logger.error(f"Error reading files from {export_path}: {e}")
         file_paths = []
     
+    if len(file_paths) == 0:
+        return {"no_files_found": True}
+
     return {"file_paths": file_paths}
 
 
@@ -149,17 +156,76 @@ def check_all_photos_processed(
         "notes": [note] if note else [],
     }
 
+def agree_with_user(notes: list[str], config: dict) -> dict:
+    thread_id = (config.get("configurable") or {}).get("thread_id", "")
+    subject = config.get("subject", "New notes")
+    logger.info(f"Agreeing with user for thread {thread_id}")
+    smtp_server = os.environ.get("SMTP_SERVER")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_username = os.environ.get("SMTP_USERNAME")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+    from_email = os.environ.get("FROM_EMAIL")
+    to_email = os.environ.get("TO_EMAIL")
+    frontend_base_url = config.get("frontend_base_url", "http://localhost:3000/hitl")
 
-def save_notes(notes: list[str], obsidian_folder_path: str, config: dict) -> dict:
+    if not smtp_server:
+        raise ValueError("SMTP_SERVER environment variable is required")
+    if not from_email:
+        raise ValueError("FROM_EMAIL environment variable is required")
+    if not to_email:
+        raise ValueError("recipient is required for email delivery")
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    link = f"{frontend_base_url}?thread_id={thread_id}"
+    # Convert markdown to HTML for proper email display
+    html_content = markdown.markdown(f"Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n" + "\n\n".join(notes))
+    msg.set_content("Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n\n" + "\n\n".join(notes))  # Plain text fallback
+    msg.add_alternative(html_content, subtype='html')
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            if smtp_username and smtp_password:
+                server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+        logger.info("Email sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        raise e
+    
+    return {"comments_from_user": "doesn't matter here as will be overridden by the user's comments"}
+
+def apply_user_comments(notes: list[str], comments_from_user: str, config: dict) -> dict:
+    model = config.get("model", "gemma3:12b")
+    reasoning = config.get("reasoning", False)
+    temperature = config.get("temperature", 0)
+    
+    llm = ChatOllama(
+        model=model,
+        reasoning=reasoning,
+        temperature=temperature,
+        validate_model_on_init = True,
+    )
+    
+    response = llm.invoke(f"Apply the user's comments to the notes:\n\n comments:\n{comments_from_user} \n Notes:{notes}")
+    notes_to_save = getattr(response, "content", str(response))
+
+    return {"notes_to_save": notes_to_save}
+
+def save_notes(notes: str | None, no_files_found: bool | None, obsidian_folder_path: str, config: dict) -> dict:
+    if no_files_found or not notes:
+        return {"notes_file_path": "no notes to save"}
+    
     date_str = datetime.now().strftime("%Y-%m-%d")
     os.makedirs(obsidian_folder_path, exist_ok=True)
     note_path = os.path.join(
         obsidian_folder_path, f"note_from_photos_{date_str}.md"
     )
     with open(note_path, "a", encoding="utf-8") as f:
-        for i, n in enumerate(notes):
-            if n:
-                f.write(f"# Photo{i+1}\n")
-                f.write(n)
-                f.write("\n\n")
+        f.write(notes)
     return {"notes_file_path": note_path}

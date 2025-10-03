@@ -141,6 +141,43 @@ export default function App() {
     })
   }, [])
 
+  // Handle deep linking with thread_id query parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const threadId = params.get('thread_id')
+
+    if (threadId) {
+      // Wait a bit for workflows to load, then open the modal
+      const timer = setTimeout(() => {
+        const workflow = workflows.find(w => w.id === threadId)
+        if (workflow) {
+          openDetailsModal(threadId)
+        } else {
+          // If not in list yet, try to fetch it directly
+          getWorkflow(threadId).then(data => {
+            workflowDetailsRef.current = {
+              ...workflowDetailsRef.current,
+              [data.id]: data
+            }
+            setWorkflowDetails(current => ({
+              ...current,
+              [data.id]: data
+            }))
+            setSelectedId(threadId)
+            setShowDetailsModal(true)
+            if (data.status === 'needs_input') {
+              setShowInterrupt(true)
+            }
+          }).catch(error => {
+            console.error('Failed to fetch workflow from URL', error)
+          })
+        }
+      }, 100)
+
+      return () => clearTimeout(timer)
+    }
+  }, [workflows])
+
   useEffect(() => {
     if (!selectedId) {
       setSelected(null)
@@ -191,7 +228,7 @@ export default function App() {
   }, [selectedId, selected?.status])
 
   useEffect(() => {
-    if (selected && selected.status === 'needs_input' && selected.result?.__interrupt__) {
+    if (selected && selected.status === 'needs_input') {
       setShowInterrupt(true)
     } else {
       setShowInterrupt(false)
@@ -280,6 +317,13 @@ export default function App() {
     setExpandedSections({ inputs: true, results: true, error: true })
     setSelectedId(id)
     setShowDetailsModal(true)
+
+    // Check if we need to show interrupt section
+    const workflow = workflows.find(w => w.id === id)
+    if (workflow?.status === 'needs_input') {
+      setShowInterrupt(true)
+    }
+
     if (!workflowDetails[id]) {
       getWorkflow(id).then(data => {
         workflowDetailsRef.current = {
@@ -291,6 +335,10 @@ export default function App() {
           [data.id]: data
         }))
         setSelected(data)
+        // Also set showInterrupt if status is needs_input
+        if (data.status === 'needs_input') {
+          setShowInterrupt(true)
+        }
       })
     }
   }
@@ -379,6 +427,17 @@ export default function App() {
                             onClick={event => {
                               event.stopPropagation()
                               handleRetry(workflow.id)
+                            }}
+                          >
+                            Retry
+                          </button>
+                        )}
+                        {workflow.status === 'needs_input' && (
+                          <button
+                            className="table-continue-btn"
+                            onClick={event => {
+                              event.stopPropagation()
+                              openDetailsModal(workflow.id)
                             }}
                           >
                             Continue
@@ -486,14 +545,21 @@ export default function App() {
               </div>
             )}
 
-            {showInterrupt && interrupt && (
+            {showInterrupt && (
               <div className="interrupt-section">
-                <h3>Questions</h3>
-                <div className="questions-list">
-                  {interrupt.value.questions.map((question, idx) => (
-                    <p key={idx} className="question">{question}</p>
-                  ))}
-                </div>
+                {interrupt && interrupt.value && interrupt.value.questions && (
+                  <>
+                    <h3>Questions</h3>
+                    <div className="questions-list">
+                      {interrupt.value.questions.map((question, idx) => (
+                        <p key={idx} className="question">{question}</p>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {!interrupt && (
+                  <h3>Workflow Needs Input</h3>
+                )}
                 <div className="answer-input">
                   <input
                     value={answer}
