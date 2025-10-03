@@ -1,0 +1,32 @@
+# Local pre-commit configuration
+#
+# This file can be used for local development with different settings
+# Copy this to .pre-commit-config.yaml and modify as needed
+#
+# To skip pre-commit hooks temporarily:
+#   git commit --no-verify
+#
+# To run hooks manually:
+#   make lint
+#   or
+#   pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.2
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        # Run the formatter
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: mixed-line-ending

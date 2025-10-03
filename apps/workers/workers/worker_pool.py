@@ -1,13 +1,14 @@
 import asyncio
+import logging
 import os
 import uuid
-import asyncpg
-import logging
 
+import asyncpg
 import dotenv
+
 dotenv.load_dotenv()
 
-from workers.db import claim_job, run_wirl, set_state
+from workers.db import claim_job, run_wirl, set_state  # noqa: E402
 
 CONCURRENCY = int(os.getenv("WORKERS", 4))
 TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT_MINUTES", 20)) * 60  # Convert minutes to seconds
@@ -23,10 +24,7 @@ async def worker(pool: asyncpg.pool.Pool, wid: str) -> None:
             continue
         try:
             # Run the workflow with timeout
-            new_state, result = await asyncio.wait_for(
-                run_wirl(job), 
-                timeout=TASK_TIMEOUT
-            )
+            new_state, result = await asyncio.wait_for(run_wirl(job), timeout=TASK_TIMEOUT)
             await set_state(pool, job["id"], new_state, result=result)
         except asyncio.TimeoutError:
             # Task timed out - mark as failed

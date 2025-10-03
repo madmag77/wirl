@@ -26,7 +26,7 @@ WIRL is a compact workflow DSL (Domain Specific Language) that compiles to an ex
 │       └── requirements.txt            # Workflow-specific dependencies
 ├── apps/
 │   ├── backend/            # FastAPI backend (placeholder)
-│   ├── frontend/           # React frontend (placeholder)  
+│   ├── frontend/           # React frontend (placeholder)
 │   └── workers/            # Background workers (placeholder)
 ├── extensions/vscode/      # VSCode syntax highlighting extension
 ├── infra/macos/           # macOS LaunchAgent template
@@ -37,7 +37,7 @@ WIRL is a compact workflow DSL (Domain Specific Language) that compiles to an ex
 ## How to Use WIRL
 
 ### Prerequisites
-- **Python 3.11+** 
+- **Python 3.11+**
 - **uv package manager** (`pip install uv`)
 - **macOS users**: Poppler for PDF workflows (`brew install poppler`)
 - **Optional**: Overmind for process supervision (`brew install overmind`)
@@ -78,7 +78,7 @@ overmind start
 
 **Services run on:**
 - Frontend: http://localhost:3000
-- Backend: http://localhost:8000  
+- Backend: http://localhost:8000
 - Postgres: Docker container
 
 ### Option 2: Production Setup (Auto-start Service)
@@ -110,7 +110,7 @@ If issues occur:
 # View output logs
 tail -f ~/.local/log/wirl-workflows-overmind.out
 
-# View error logs  
+# View error logs
 tail -f ~/.local/log/wirl-workflows-overmind.err
 
 # Restart service
@@ -144,15 +144,15 @@ workflow MyWorkflow {
     owner: "developer"
     version: "1.0"
   }
-  
+
   inputs {
     String input_param
   }
-  
+
   outputs {
     String result = ProcessData.output
   }
-  
+
   node ProcessData {
     call process_data_function
     inputs {

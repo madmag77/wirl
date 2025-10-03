@@ -1,4 +1,4 @@
-.PHONY: workflows-setup workflows-setup-dev init-venv check-uv check-overmind install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow run_wirl_apps install-frontend-deps get_telegram_chat_id
+.PHONY: workflows-setup workflows-setup-dev init-venv check-uv check-overmind install-core install-core-dev install-workflow-deps install-backend-deps install-worker-deps test-workflow test-all-workflows run-workflow run_wirl_apps install-frontend-deps get_telegram_chat_id install-precommit lint
 
 ROOT := $(CURDIR)
 VENV := $(ROOT)/.venv
@@ -43,10 +43,10 @@ check-overmind:
 run_wirl_apps: check-overmind
 	overmind start -f $(ROOT)/procfile
 
-workflows-setup: install-core install-workflow-deps install-backend-deps install-worker-deps install-frontend-deps
+workflows-setup: install-core install-backend-deps install-worker-deps install-frontend-deps install-workflow-deps
 	@echo "Workflows environment is ready in $(VENV)"
 
-workflows-setup-dev: install-core-dev install-workflow-deps install-backend-deps install-worker-deps
+workflows-setup-dev: install-core-dev install-backend-deps install-worker-deps install-frontend-deps install-workflow-deps
 	@echo "Workflows development environment is ready in $(VENV)"
 
 #
@@ -134,3 +134,22 @@ test-python-packages:
 
 # Alias for clarity (reuses existing target)
 test-workflows: test-all-workflows
+
+#
+# Pre-commit hooks and linting
+#
+.PHONY: install-precommit lint
+
+# Install pre-commit hooks
+install-precommit:
+	uv pip install --python $(PY) pre-commit
+	$(VENV)/bin/pre-commit install
+	@echo "Pre-commit hooks installed successfully"
+
+# Run linting on all files
+lint:
+	@if ! command -v $(VENV)/bin/pre-commit >/dev/null 2>&1; then \
+		echo "Installing pre-commit..."; \
+		$(MAKE) install-precommit; \
+	fi
+	$(VENV)/bin/pre-commit run --all-files

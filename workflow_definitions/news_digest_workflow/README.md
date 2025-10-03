@@ -50,7 +50,7 @@ After creating the bot, you need to get your chat ID to receive messages:
 make get_telegram_chat_id
 ```
 
-This command will return your chat ID (a number like `123456789`). Add this ID to your `.env` file as `TELEGRAM_CHAT_ID`. 
+This command will return your chat ID (a number like `123456789`). Add this ID to your `.env` file as `TELEGRAM_CHAT_ID`.
 Choose the type of transport as `email` or `telegram` in `const` section of you `SendSummary` node, like this
 ```
     const {

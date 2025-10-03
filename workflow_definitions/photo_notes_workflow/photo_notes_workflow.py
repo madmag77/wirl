@@ -1,29 +1,27 @@
-import os
 import base64
-from io import BytesIO
-from datetime import datetime
 import logging
-from PIL import Image as PILImage
-from langchain_openai import ChatOpenAI
-from email.message import EmailMessage
+import os
 import smtplib
+from datetime import datetime
+from email.message import EmailMessage
+from io import BytesIO
+from typing import Any
+
 import markdown
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.serde import jsonplus
+from langgraph.checkpoint.serde.jsonplus import _msgpack_default, _option, ormsgpack
+from PIL import Image as PILImage
+from pillow_heif import register_heif_opener
 
 logger = logging.getLogger(__name__)
 
 # Register HEIF opener with Pillow
-from pillow_heif import register_heif_opener
 register_heif_opener()
 
 # Workaround for langgraph checkpoint serialization error
 # https://github.com/langchain-ai/langgraph/issues/4956#issuecomment-3135374853
-from typing import Any
-
-from langgraph.checkpoint.serde import jsonplus
-from langgraph.checkpoint.serde.jsonplus import _msgpack_default
-from langgraph.checkpoint.serde.jsonplus import _option
-from langgraph.checkpoint.serde.jsonplus import ormsgpack
 
 
 def message_to_dict(msg):
@@ -45,11 +43,17 @@ def message_to_dict(msg):
         # Fallback: try to extract content and role
         print("Serialization Fallback, type:", type(msg))
         print(msg)
-        return {"role": getattr(msg, "role", "user"), "content": str(getattr(msg, "content", msg))}
+        return {
+            "role": getattr(msg, "role", "user"),
+            "content": str(getattr(msg, "content", msg)),
+        }
 
 
 def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(message_to_dict(data), default=_msgpack_default, option=_option)
+    return ormsgpack.packb(
+        message_to_dict(data), default=_msgpack_default, option=_option
+    )
+
 
 setattr(jsonplus, "_msgpack_enc", _msgpack_enc)
 
@@ -58,13 +62,23 @@ logger = logging.getLogger(__name__)
 
 def get_photos(config: dict, obsidian_folder_path: str) -> dict:
     export_path = os.path.expanduser(config.get("export_path", "~/Exports"))
-    
+
     # Ensure export directory exists
     os.makedirs(export_path, exist_ok=True)
-    
+
     # Read all image files from the export directory
     file_paths = []
-    supported_extensions = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.tiff', '.tif', '.bmp', '.gif'}
+    supported_extensions = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".heic",
+        ".heif",
+        ".tiff",
+        ".tif",
+        ".bmp",
+        ".gif",
+    }
 
     try:
         for filename in os.listdir(export_path):
@@ -73,21 +87,23 @@ def get_photos(config: dict, obsidian_folder_path: str) -> dict:
                 _, ext = os.path.splitext(filename.lower())
                 if ext in supported_extensions:
                     file_paths.append(file_path)
-        
+
         file_paths.sort()  # Sort for consistent processing order
         logger.info(f"Found {len(file_paths)} image files in {export_path}")
-        
+
     except Exception as e:
         logger.error(f"Error reading files from {export_path}: {e}")
         file_paths = []
-    
+
     if len(file_paths) == 0:
         return {"no_files_found": True}
 
     return {"file_paths": file_paths}
 
 
-def read_photo(file_paths: list[str], initial_file_paths_to_process: list[str], config: dict) -> dict:
+def read_photo(
+    file_paths: list[str], initial_file_paths_to_process: list[str], config: dict
+) -> dict:
     file_paths_to_process = file_paths if file_paths else initial_file_paths_to_process
     if len(file_paths_to_process) == 0:
         return {"no_files_to_process": True}
@@ -122,16 +138,16 @@ def extract_note(image: PILImage.Image, config: dict) -> dict:
         {
             "type": "text",
             "text": """
-              Firstly, classify the phot into the one of the following classes: 
+              Firstly, classify the phot into the one of the following classes:
                 1. Casual photo of people, buildings or nature.
                 2. Photo of a product, food, or any other type of object close-up.
-                3. Photo of a document, receipt, ticket, or any other type of document. 
+                3. Photo of a document, receipt, ticket, or any other type of document.
                 4. Screenshot of a text message, email, webpage, or any other type of screenshot.
-                
+
                 For the class 1, describe the photo.
-                For the class 2, describe the object in details including all the texts on it. 
-                For the class 3, describe the document and extract all the text from it trying to preserve formatting and layout. 
-                For the class 4, describe the important information from the screenshot and extract all the text from it trying to preserve formatting and layout. Don't describe colors or background, just the important information.  
+                For the class 2, describe the object in details including all the texts on it.
+                For the class 3, describe the document and extract all the text from it trying to preserve formatting and layout.
+                For the class 4, describe the important information from the screenshot and extract all the text from it trying to preserve formatting and layout. Don't describe colors or background, just the important information.
             """,
         },
         {
@@ -155,6 +171,7 @@ def check_all_photos_processed(
         "is_done": len(remaining_file_paths_to_process) == 0,
         "notes": [note] if note else [],
     }
+
 
 def agree_with_user(notes: list[str], config: dict) -> dict:
     thread_id = (config.get("configurable") or {}).get("thread_id", "")
@@ -181,9 +198,15 @@ def agree_with_user(notes: list[str], config: dict) -> dict:
     msg["To"] = to_email
     link = f"{frontend_base_url}?thread_id={thread_id}"
     # Convert markdown to HTML for proper email display
-    html_content = markdown.markdown(f"Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n" + "\n\n".join(notes))
-    msg.set_content("Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n\n" + "\n\n".join(notes))  # Plain text fallback
-    msg.add_alternative(html_content, subtype='html')
+    html_content = markdown.markdown(
+        f"Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n"
+        + "\n\n".join(notes)
+    )
+    msg.set_content(
+        "Review the notes and let me know which ones I should store using the link: {link}.\n\n Here are the notes:\n\n"
+        + "\n\n".join(notes)
+    )  # Plain text fallback
+    msg.add_alternative(html_content, subtype="html")
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port) as server:
@@ -197,35 +220,46 @@ def agree_with_user(notes: list[str], config: dict) -> dict:
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
         raise e
-    
-    return {"comments_from_user": "doesn't matter here as will be overridden by the user's comments"}
 
-def apply_user_comments(notes: list[str], comments_from_user: str, config: dict) -> dict:
+    return {
+        "comments_from_user": "doesn't matter here as will be overridden by the user's comments"
+    }
+
+
+def apply_user_comments(
+    notes: list[str], comments_from_user: str, config: dict
+) -> dict:
     model = config.get("model", "gemma3:12b")
     reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
-    
+
     llm = ChatOllama(
         model=model,
         reasoning=reasoning,
         temperature=temperature,
-        validate_model_on_init = True,
+        validate_model_on_init=True,
     )
-    
-    response = llm.invoke(f"Apply the user's comments to the notes:\n\n comments:\n{comments_from_user} \n Notes:{notes}")
+
+    response = llm.invoke(
+        f"Apply the user's comments to the notes:\n\n comments:\n{comments_from_user} \n Notes:{notes}"
+    )
     notes_to_save = getattr(response, "content", str(response))
 
     return {"notes_to_save": notes_to_save}
 
-def save_notes(notes: str | None, no_files_found: bool | None, obsidian_folder_path: str, config: dict) -> dict:
+
+def save_notes(
+    notes: str | None,
+    no_files_found: bool | None,
+    obsidian_folder_path: str,
+    config: dict,
+) -> dict:
     if no_files_found or not notes:
         return {"notes_file_path": "no notes to save"}
-    
+
     date_str = datetime.now().strftime("%Y-%m-%d")
     os.makedirs(obsidian_folder_path, exist_ok=True)
-    note_path = os.path.join(
-        obsidian_folder_path, f"note_from_photos_{date_str}.md"
-    )
+    note_path = os.path.join(obsidian_folder_path, f"note_from_photos_{date_str}.md")
     with open(note_path, "a", encoding="utf-8") as f:
         f.write(notes)
     return {"notes_file_path": note_path}

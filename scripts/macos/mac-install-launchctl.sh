@@ -45,24 +45,24 @@ command_exists() {
 # Function to install overmind
 install_overmind() {
     print_status "Checking if overmind is installed..."
-    
+
     if command_exists overmind; then
         print_success "Overmind is already installed at $(which overmind)"
         return 0
     fi
-    
+
     print_status "Overmind not found. Installing via Homebrew..."
-    
+
     # Check if homebrew is installed
     if ! command_exists brew; then
         print_error "Homebrew is not installed. Please install Homebrew first:"
         print_error "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
         exit 1
     fi
-    
+
     # Install overmind
     brew install overmind
-    
+
     if command_exists overmind; then
         print_success "Overmind installed successfully at $(which overmind)"
     else
@@ -74,21 +74,21 @@ install_overmind() {
 # Function to generate plist from template
 generate_plist() {
     print_status "Generating plist file from template..."
-    
+
     if [ ! -f "$PLIST_TEMPLATE" ]; then
         print_error "Template file not found: $PLIST_TEMPLATE"
         exit 1
     fi
-    
+
     # Get current user
     CURRENT_USER=$(whoami)
-    
+
     # Get overmind path
     OVERMIND_PATH=$(which overmind)
-    
+
     # Create LaunchAgents directory if it doesn't exist
     mkdir -p "$LAUNCHAGENTS_DIR"
-    
+
     # Replace placeholders in template
     sed -e "s|{USERNAME}|$CURRENT_USER|g" \
         -e "s|{PATH TO REPO}|$REPO_ROOT|g" \
@@ -96,38 +96,38 @@ generate_plist() {
         -e "s|/opt/homebrew/bin/overmind|$OVERMIND_PATH|g" \
         -e "s|/Users/username/wirl|$REPO_ROOT|g" \
         "$PLIST_TEMPLATE" > "$PLIST_FILE"
-    
+
     # Create log directory
     mkdir -p "$HOME/.local/log"
-    
+
     print_success "Generated plist file: $PLIST_FILE"
 }
 
 # Function to install and load the service
 install_and_load_service() {
     print_status "Installing and loading the service..."
-    
+
     # Unload existing service if it exists
     if launchctl list | grep -q "$SERVICE_NAME"; then
         print_status "Unloading existing service..."
         launchctl unload "$PLIST_FILE" 2>/dev/null || true
     fi
-    
+
     # Load the new service
     print_status "Loading service: $SERVICE_NAME"
     launchctl load "$PLIST_FILE"
-    
+
     # Start the service
     print_status "Starting service..."
     launchctl start "$SERVICE_NAME"
-    
+
     print_success "Service installed and loaded successfully"
 }
 
 # Function to verify installation
 verify_installation() {
     print_status "Verifying installation..."
-    
+
     # Check if service is loaded
     if launchctl list | grep -q "$SERVICE_NAME"; then
         print_success "Service is loaded in launchctl"
@@ -135,10 +135,10 @@ verify_installation() {
         print_error "Service is not loaded in launchctl"
         return 1
     fi
-    
+
     # Wait a moment for service to start
     sleep 3
-    
+
     # Check if overmind socket exists
     SOCKET_PATH="$REPO_ROOT/.overmind.sock"
     if [ -S "$SOCKET_PATH" ]; then
@@ -146,11 +146,11 @@ verify_installation() {
     else
         print_warning "Overmind socket not found. Service might still be starting..."
     fi
-    
+
     # Check log files
     LOG_OUT="$HOME/.local/log/wirl-workflows-overmind.out"
     LOG_ERR="$HOME/.local/log/wirl-workflows-overmind.err"
-    
+
     if [ -f "$LOG_OUT" ]; then
         print_status "Output log: $LOG_OUT"
         if [ -s "$LOG_OUT" ]; then
@@ -158,7 +158,7 @@ verify_installation() {
             tail -5 "$LOG_OUT" | sed 's/^/  /'
         fi
     fi
-    
+
     if [ -f "$LOG_ERR" ] && [ -s "$LOG_ERR" ]; then
         print_warning "Error log has content: $LOG_ERR"
         print_status "Recent error log entries:"
@@ -202,17 +202,17 @@ show_usage() {
 # Function to uninstall service
 uninstall_service() {
     print_status "Uninstalling service..."
-    
+
     if launchctl list | grep -q "$SERVICE_NAME"; then
         launchctl unload "$PLIST_FILE"
         print_success "Service unloaded"
     fi
-    
+
     if [ -f "$PLIST_FILE" ]; then
         rm "$PLIST_FILE"
         print_success "Plist file removed"
     fi
-    
+
     print_success "Service uninstalled successfully"
 }
 
@@ -220,7 +220,7 @@ uninstall_service() {
 main() {
     print_status "Starting macOS Overmind LaunchCtl installation..."
     print_status "Repository: $REPO_ROOT"
-    
+
     # Parse command line arguments
     case "${1:-}" in
         -h|--help)
@@ -236,19 +236,19 @@ main() {
             exit 0
             ;;
     esac
-    
+
     # Check if we're in the right directory
     if [ ! -f "$REPO_ROOT/procfile" ]; then
         print_error "Procfile not found in repository root. Are you in the correct directory?"
         exit 1
     fi
-    
+
     # Execute installation steps
     install_overmind
     generate_plist
     install_and_load_service
     verify_installation
-    
+
     print_success "Installation completed successfully!"
     print_status "Your wirl services should now start automatically on system boot."
     print_status ""

@@ -1,25 +1,29 @@
 # Runner for Wirl workflows
 
 from __future__ import annotations
-import json
-import re
-import traceback
-import logging
-from typing import Any, Dict, List, Set
+
 import argparse
+import json
+import logging
+import traceback
+from typing import Any, Dict, List
+
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
+
 from wirl_pregel_runner.pregel_graph_builder import build_pregel_graph
 
 logger = logging.getLogger(__name__)
 
-def run_workflow(workflow_path: str,
-                 fn_map: Dict[str, Any],
-                 params: Dict[str, Any] | None = None,
-                 thread_id: str | None = None,
-                 resume: str | None = None,
-                 checkpointer: Any | None = None,
-                 ):
+
+def run_workflow(
+    workflow_path: str,
+    fn_map: Dict[str, Any],
+    params: Dict[str, Any] | None = None,
+    thread_id: str | None = None,
+    resume: str | None = None,
+    checkpointer: Any | None = None,
+):
     logger.info(f"Running workflow {workflow_path} for thread {thread_id}, with params {params}, resume {resume}")
     app = build_pregel_graph(workflow_path, functions=fn_map, checkpointer=checkpointer)
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 1000}
@@ -40,10 +44,8 @@ def run_workflow(workflow_path: str,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run an Wirl workflow.")
     parser.add_argument("workflow_path", type=str, help="Path to the workflow file")
-    parser.add_argument("--functions", type=str, default="steps.deepresearch_functions",
-                        help="Python module containing the workflow functions")
-    parser.add_argument("--param", action="append", default=[],
-                        help="Workflow input parameter key=value")
+    parser.add_argument("--functions", type=str, default="steps.deepresearch_functions", help="Python module containing the workflow functions")
+    parser.add_argument("--param", action="append", default=[], help="Workflow input parameter key=value")
     parser.add_argument("--thread-id", type=str, default="cli")
     parser.add_argument("--resume", type=str, default=None)
     args = parser.parse_args()
@@ -57,9 +59,9 @@ if __name__ == "__main__":
             if "=" not in p:
                 raise ValueError(f"Invalid param: {p}")
             k, v = p.split("=", 1)
-            
+
             # Try to parse as JSON first (handles lists, dicts, booleans, null)
-            if v.startswith(('[', '{')) or v in ('true', 'false', 'null'):
+            if v.startswith(("[", "{")) or v in ("true", "false", "null"):
                 try:
                     v = json.loads(v)
                 except json.JSONDecodeError:
@@ -73,7 +75,7 @@ if __name__ == "__main__":
                     v = float(v)
                 except ValueError:
                     pass  # Keep as string
-            
+
             out[k] = v
         return out
 

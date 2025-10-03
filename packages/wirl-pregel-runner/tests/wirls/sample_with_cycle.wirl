@@ -44,7 +44,7 @@ workflow SampleRAGWorkflow {
            Bool need_filtering
         }
     }
-    
+
     node RetrieveResultsCheck {
         call retrieve_results_check
         inputs {
@@ -75,7 +75,7 @@ workflow SampleRAGWorkflow {
     }
     when {
       RetrieveLoop.need_filtering
-    }    
+    }
     const {
       llm_model: "gpt-4o"
     }

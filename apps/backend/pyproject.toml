@@ -46,5 +46,3 @@ indent-style = "space"
 
 [tool.uv]
 default-groups = ['dev']
-
-

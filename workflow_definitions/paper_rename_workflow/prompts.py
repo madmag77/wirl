@@ -1,7 +1,7 @@
 def get_vision_prompt() -> str:
     return """
     You are analyzing the title page and first pages of a book.
-    
+
     Please extract the following information by looking at the provided images AND text:
     1. book_name - Find the complete title of the book
     2. authors_names - Identify all authors (as an array of names)

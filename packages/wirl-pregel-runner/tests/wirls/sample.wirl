@@ -44,7 +44,7 @@ workflow SampleRAGWorkflow {
     }
     when {
       Retrieve.need_filtering
-    }    
+    }
     const {
       llm_model: "gpt-4o"
     }
