@@ -51,8 +51,8 @@ jobs:
       - name: Install core dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv/bin/python -e packages/wirl-lang
-          uv pip install --python .venv/bin/python -e "packages/wirl-pregel-runner[dev]"
+          uv pip install --python $PWD/.venv/bin/python -e packages/wirl-lang
+          cd packages/wirl-pregel-runner && uv pip install --python $PWD/../../.venv/bin/python -e . --group dev
 
       - name: Run Python package tests
         run: |
@@ -77,13 +77,13 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv/bin/python -e packages/wirl-lang
-          uv pip install --python .venv/bin/python -e "packages/wirl-pregel-runner[dev]"
+          uv pip install --python $PWD/.venv/bin/python -e packages/wirl-lang
+          cd packages/wirl-pregel-runner && uv pip install --python $PWD/../../.venv/bin/python -e . --group dev
 
       - name: Install workflow dependencies
         run: |
           find workflow_definitions -type f -name requirements.txt -print0 | \
-            xargs -0 -I {} uv pip install --python .venv/bin/python -r {}
+            xargs -0 -I {} uv pip install --python $PWD/.venv/bin/python -r {}
 
       - name: Run workflow tests
         run: |
