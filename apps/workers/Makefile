@@ -35,7 +35,3 @@ test:
 
 test_cov:
 	$(PY) -m pytest -q tests --cov=workers --cov-report=term-missing
-
-
-
-

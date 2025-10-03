@@ -153,7 +153,7 @@ The workflow is configured with these defaults:
 
 - **Export path**: `~/Exports` (folder where Shortcuts saves photos)
 - **Shortcuts schedule**: Daily at 5:00 AM
-- **AI Model**: `gemma3:12b` 
+- **AI Model**: `gemma3:12b`
 - **LLM Server**: `http://localhost:11434/v1/` (local Ollama)
 - **Temperature**: `0` (deterministic responses)
 - **Max iterations**: `30` photos per run

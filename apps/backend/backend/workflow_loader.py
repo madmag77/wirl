@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 WORKFLOWS_DIR = Path(os.getenv("WORKFLOW_DEFINITIONS_PATH", "workflow_definitions"))
+
 
 def list_templates() -> List[Dict[str, str]]:
     templates: List[Dict[str, str]] = []

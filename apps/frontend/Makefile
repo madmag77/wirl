@@ -34,4 +34,3 @@ test:
 clean:
 	rm -rf node_modules dist
 	$(NPM) cache clean --force
-

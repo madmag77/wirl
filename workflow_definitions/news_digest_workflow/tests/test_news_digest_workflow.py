@@ -1,6 +1,9 @@
 from wirl_pregel_runner import run_workflow
 
-def get_next_resource(resources: list | None, initial_resources_to_process: list, config: dict) -> dict:
+
+def get_next_resource(
+    resources: list | None, initial_resources_to_process: list, config: dict
+) -> dict:
     resources_to_process = resources or initial_resources_to_process
     if not resources_to_process:
         return {"no_resources_to_process": True}
@@ -9,7 +12,9 @@ def get_next_resource(resources: list | None, initial_resources_to_process: list
 
 
 def fetch_news(resource: dict, config: dict) -> dict:
-    return {"fetched_items": [{"title": "t", "summary": "s", "link": "", "published": None}]}
+    return {
+        "fetched_items": [{"title": "t", "summary": "s", "link": "", "published": None}]
+    }
 
 
 def collect_news(
@@ -20,7 +25,10 @@ def collect_news(
 ) -> dict:
     if no_resources_to_process:
         return {"is_done": True, "news_items": []}
-    return {"is_done": len(remaining_resources_to_process) == 0, "news_items": fetched_items}
+    return {
+        "is_done": len(remaining_resources_to_process) == 0,
+        "news_items": fetched_items,
+    }
 
 
 def summarize_news(news_items: list, config: dict) -> dict:

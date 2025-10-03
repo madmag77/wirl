@@ -24,4 +24,3 @@ lint lint_diff:
 format format_diff:
 	$(PY) -m ruff format $(PYTHON_FILES)
 	$(PY) -m ruff check --select I --fix $(PYTHON_FILES)
-

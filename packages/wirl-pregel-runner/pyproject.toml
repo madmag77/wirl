@@ -46,5 +46,3 @@ wirl-lang = { path = "../wirl-lang", editable = true }
 
 [tool.uv]
 default-groups = ['dev']
-
-

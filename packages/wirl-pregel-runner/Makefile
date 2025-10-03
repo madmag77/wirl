@@ -43,5 +43,3 @@ test:
 
 test_cov:
 	$(PY) -m pytest -q tests --cov=pregel_runner --cov-report=term-missing
-
-

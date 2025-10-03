@@ -38,5 +38,3 @@ test:
 
 test_cov:
 	$(PY) -m pytest -q tests --cov=backend --cov-report=term-missing
-
-

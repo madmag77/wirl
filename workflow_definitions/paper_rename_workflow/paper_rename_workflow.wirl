@@ -69,7 +69,7 @@ workflow PaperRenameWorkflow {
            String year
         }
     }
-    
+
     node RenameFile {
         call rename_file
         inputs {

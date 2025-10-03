@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint with pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python pre-commit
+
+      - name: Run pre-commit hooks
+        run: |
+          .venv/bin/pre-commit run --all-files
+
+  test-python-packages:
+    name: Test Python Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install core dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python $PWD/.venv/bin/python -e packages/wirl-lang
+          cd packages/wirl-pregel-runner && uv pip install --python $PWD/../../.venv/bin/python -e . --group dev
+
+      - name: Run Python package tests
+        run: |
+          make test-python-packages PY=$PWD/.venv/bin/python
+
+  test-workflows:
+    name: Test Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python $PWD/.venv/bin/python -e packages/wirl-lang
+          cd packages/wirl-pregel-runner && uv pip install --python $PWD/../../.venv/bin/python -e . --group dev
+
+      - name: Install workflow dependencies
+        run: |
+          find workflow_definitions -type f -name requirements.txt -print0 | \
+            xargs -0 -I {} uv pip install --python $PWD/.venv/bin/python -r {}
+
+      - name: Run workflow tests
+        run: |
+          .venv/bin/pytest workflow_definitions -q

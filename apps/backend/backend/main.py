@@ -4,22 +4,21 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from enum import Enum
-from typing import Optional, Any
+from typing import Any, Optional
 
 import dotenv
-dotenv.load_dotenv()
-
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.database import init_db, get_session
-from backend.models import WorkflowRun
-from backend.workflow_loader import list_templates, get_template
-from fastapi_mcp import FastApiMCP
+dotenv.load_dotenv()
 
+from backend.database import get_session, init_db  # noqa: E402
+from backend.models import WorkflowRun  # noqa: E402
+from backend.workflow_loader import get_template, list_templates  # noqa: E402
 
 
 class WorkflowStatus(str, Enum):
@@ -76,6 +75,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     pass
+
 
 app = FastAPI(lifespan=lifespan, docs_url="/api/docs")
 
@@ -160,10 +160,10 @@ def continue_workflow(
         raise HTTPException(404, "Workflow not found")
     if run.state != WorkflowStatus.NEEDS_INPUT and run.state != WorkflowStatus.FAILED:
         raise HTTPException(400, "Workflow can't be continued")
-    
+
     if run.state == WorkflowStatus.NEEDS_INPUT:
         run.resume_payload = json.dumps({"answer": request.inputs})
-    
+
     run.state = WorkflowStatus.QUEUED
     db.commit()
     db.refresh(run)
@@ -185,9 +185,11 @@ def cancel_workflow(
     db.refresh(run)
     return WorkflowResponse(id=run.id, status=run.state, result=run.result or {})
 
+
 mcp = FastApiMCP(app, name="workflow runner")
 mcp.mount()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

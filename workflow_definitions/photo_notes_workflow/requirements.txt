@@ -3,3 +3,5 @@ langchain-openai>=0.2,<1
 pillow>=10,<12
 pillow-heif>=0.16,<1
 markdown
+langgraph
+dotenv
