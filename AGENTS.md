@@ -1,264 +1,225 @@
-# AI Agent Developer Notes for WIRL Repository
+# Agents Guide
 
-This document provides comprehensive guidance for AI agents working with developers on the WIRL (Workflow DSL and Runner) repository.
+This guide tells you where the code is, what rules to follow, and how to run, debug, and test—for the core language/runner, the apps, and new workflows.
 
-## What is WIRL?
+---
 
-WIRL is a compact workflow DSL (Domain Specific Language) that compiles to an explicit directed graph with nodes, cycles with guards, and reducers. It includes a Python runner that executes these graphs on a Pregel-like model.
+## 1) Working on the core (WIRL language + runner)
 
-**Core Components:**
-- **DSL Grammar & Parser** (`packages/wirl-lang/`) - Parses `.wirl` files using BNF grammar
-- **Pregel Runner** (`packages/wirl-pregel-runner/`) - Executes workflows using LangGraph Pregel
-- **Workflow Definitions** (`workflow_definitions/`) - Example workflows with Python implementations
-- **Development Tools** - VSCode syntax extension, macOS launchctl template, Procfile for local dev
+### Code map
 
-## Repository Structure
+- **DSL grammar + parser**: `packages/wirl-lang/wirl_lang/wirl.bnf`, `packages/wirl-lang/wirl_lang/wirl_parser.py` (public API: `parse_wirl_to_objects`)
+- **Runner**: `packages/wirl-pregel-runner/` — CLI entry: `python -m wirl_pregel_runner.pregel_runner` and graph builder: `wirl_pregel_runner/pregel_graph_builder.py`
+- **Example DSLs + tests**: `packages/wirl-pregel-runner/tests/` and `packages/wirl-pregel-runner/tests/wirls/`
+- **VSCode syntax**: `extensions/vscode/` (grammar in `syntaxes/wirl.tmLanguage.json`)
 
-```
-/Users/artemgoncharov/wirl/
-├── packages/
-│   ├── wirl-lang/           # DSL grammar (wirl.bnf) and parser
-│   └── wirl-pregel-runner/  # LangGraph Pregel-based runner
-├── workflow_definitions/    # Workflow examples and implementations
-│   └── paper_rename_workflow/
-│       ├── paper_rename_workflow.wirl  # DSL definition
-│       ├── paper_rename_workflow.py    # Python implementation
-│       └── requirements.txt            # Workflow-specific dependencies
-├── apps/
-│   ├── backend/            # FastAPI backend (placeholder)
-│   ├── frontend/           # React frontend (placeholder)
-│   └── workers/            # Background workers (placeholder)
-├── extensions/vscode/      # VSCode syntax highlighting extension
-├── infra/macos/           # macOS LaunchAgent template
-├── scripts/macos/         # Installation and setup scripts
-└── procfile               # Overmind process definition
-```
+### Rules to respect
 
-## How to Use WIRL
+- **Grammar change rule**: anything you add to the BNF must be reflected in the parser (transformer, dataclasses) so the AST supports it. Edit `wirl_parser.py` alongside `wirl.bnf`. Keep the AST stable for existing constructs (backward compatibility).
+- **Runner wiring**: grammar changes are inert until the runner knows how to execute them. Extend `pregel_graph_builder.py` if the new syntax affects scheduling, dependencies, guards, reducers, etc.
+- **VSCode extension**: update tokens/keywords in `extensions/vscode/syntaxes/wirl.tmLanguage.json` to keep highlighting in sync; re‑package the extension.
 
-### Prerequisites
-- **Python 3.11+**
-- **uv package manager** (`pip install uv`)
-- **macOS users**: Poppler for PDF workflows (`brew install poppler`)
-- **Optional**: Overmind for process supervision (`brew install overmind`)
+### Run, debug, test
 
-### Quick Setup
+#### Environment setup (repo root)
+
 ```bash
-# Install all dependencies (recommended)
+make workflows-setup          # .venv + core pkgs + per-workflow deps
+make workflows-setup-dev      # same, dev‑editable installs
+```
+
+These targets install `wirl-lang` and `wirl-pregel-runner` editable and pick up all `workflow_definitions/**/requirements.txt`.
+
+#### Unit tests (runner)
+
+```bash
+make -C packages/wirl-pregel-runner test
+```
+
+Example runner tests and example `.wirl` files live under `packages/wirl-pregel-runner/tests/…`. Mirror that pattern when you add new grammar/runner features.
+
+#### Add a focused e2e test for a new syntax
+
+1. Create a minimal `.wirl` in `packages/wirl-pregel-runner/tests/wirls/`.
+2. Add a `tests/test_*.py` that calls `run_workflow` with mock functions and asserts node outputs / guard behavior.
+
+#### Run a workflow from the repo root (no app involved)
+
+```bash
+make run-workflow \
+  WORKFLOW=<dir-under-workflow_definitions> \
+  FUNCS=workflow_definitions.<name>.<name> \
+  PARAMS="key1=value1 key2=value2"
+```
+
+This wraps the CLI `python -m wirl_pregel_runner.pregel_runner`. Use it to sanity‑check grammar/runner changes quickly.
+
+#### VSCode syntax package
+
+```bash
+cd extensions/vscode
+npm install
+npx vsce package   # then install generated .vsix in VS Code
+```
+
+### Make targets (core)
+
+- **Root**: `workflows-setup`, `workflows-setup-dev`, `test-workflow`, `test-all-workflows`, `run-workflow`, `install-precommit`, `lint`
+- **packages/wirl-lang**: `install`, `install-dev`, `lint`, `format`
+- **packages/wirl-pregel-runner**: `test` (plus `lint`/`format`). Prefer the CLI shown above over the package's `make run` (the CLI path is authoritative).
+
+---
+
+## 2) Working on the apps (backend, workers, frontend)
+
+### Architecture
+
+- **Workers** are the only component that executes workflows. They poll the DB, claim a job, run WIRL via the runner, and update `workflow_runs`. See `apps/workers/workers/worker_pool.py`.
+- **Backend** is a FastAPI API over the DB, not an executor. It exposes templates, run history, and run control endpoints; it writes rows for workers to pick up. Tables live under `apps/backend/backend/models.py` (`workflow_runs`).
+- **Frontend** is a simple JS app served in dev via Overmind at <http://localhost:3000>.
+
+### Code map (apps)
+
+- **Backend**: `apps/backend/` (FastAPI app `backend/main.py`, SQLAlchemy models, Makefile). Docs at `/api/docs`.
+- **Workers**: `apps/workers/` (async worker pool in `workers/worker_pool.py`, Makefile).
+- **Frontend**: `apps/frontend/` (dev service started by Overmind).
+
+### Run & test (apps)
+
+#### Everything via Overmind (recommended for local dev)
+
+```bash
+# repo root
 make workflows-setup
-
-# Manual setup (alternative)
-uv venv .venv
-uv pip install --python .venv/bin/python -e packages/wirl-lang
-uv pip install --python .venv/bin/python -e packages/wirl-pregel-runner
-find workflow_definitions -type f -name requirements.txt -print0 | \
-  xargs -0 -I {} uv pip install --python .venv/bin/python -r {}
+# set env (DB + workflows path)
+# DATABASE_URL, WORKFLOW_DEFINITIONS_PATH (see below)
+make run_wirl_apps      # or: overmind start -f procfile
 ```
 
-### Running a Workflow
+Services: Backend <http://localhost:8000>, Frontend <http://localhost:3000>.
+
+#### Backend only
+
 ```bash
-. .venv/bin/activate
-python -m wirl_pregel_runner.pregel_runner \
-  workflow_definitions/paper_rename_workflow/paper_rename_workflow.wirl \
-  --functions workflow_definitions.paper_rename_workflow.paper_rename_workflow \
-  --param drafts_folder_path=/absolute/path/to/drafts \
-  --param processed_folder_path=/absolute/path/to/processed
+# from apps/backend
+make install
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows make run
+# then open http://localhost:8000/api/docs
 ```
 
-## How to Install Locally on macOS
+Endpoints: list templates, start/continue/cancel runs, inspect runs.
 
-### Option 1: Development Setup (Manual with Overmind)
+#### Workers only
+
 ```bash
-# Install overmind
-brew install overmind
-
-# Start all services using Procfile
-overmind start
+# from apps/workers
+make install
+# ensure DATABASE_URL is set to a Postgres instance
+make run
 ```
 
-**Services run on:**
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- Postgres: Docker container
+Logs are the primary debugging tool. Raise verbosity by changing the `logging.basicConfig(level=...)` line in `workers/worker_pool.py`.
 
-### Option 2: Production Setup (Auto-start Service)
+#### Inspect worker process output under Overmind
 
-**Step 1: LaunchCtl Template → Plist**
-The system uses a template (`infra/macos/launchctl.plist.template`) that gets converted to a proper plist file with system-specific paths.
-
-**Step 2: Check Overmind Installation**
-The installation script automatically checks for and installs overmind if missing.
-
-**Step 3: Run Installation Script**
 ```bash
-chmod +x scripts/macos/mac-install-launchctl.sh
-./scripts/macos/mac-install-launchctl.sh
+overmind connect workers
+# detach: Ctrl-b, then d
 ```
 
-**Step 4: Check Everything Running**
+(Procfile wiring + Overmind conventions.)
+
+#### DB + config required for apps
+
+Create `.env` in the repo root (example):
+
 ```bash
-# Check service status
-launchctl list | grep com.local.wirl.overmind
-
-# Check overmind socket
-ls -la .overmind.sock
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows
+WORKFLOW_DEFINITIONS_PATH=/absolute/path/to/workflow_definitions
 ```
 
-**Step 5: Debug Errors**
-If issues occur:
+Use the provided macOS script to launch Postgres quickly if you don't have one running:
+
 ```bash
-# View output logs
-tail -f ~/.local/log/wirl-workflows-overmind.out
-
-# View error logs
-tail -f ~/.local/log/wirl-workflows-overmind.err
-
-# Restart service
-launchctl unload ~/Library/LaunchAgents/com.local.wirl.overmind.plist
-launchctl load ~/Library/LaunchAgents/com.local.wirl.overmind.plist
-
-# Test overmind manually
-cd /Users/artemgoncharov/wirl && overmind start
-
-# Uninstall service
-./scripts/macos/mac-install-launchctl.sh --uninstall
+chmod +x scripts/macos/container-start-postgres.sh
+./scripts/macos/container-start-postgres.sh
 ```
 
-## How to Develop
+### Testing changes
 
-### Developing New Workflows
+- **Workers**: write tests that simulate job claiming and execution; prefer an ephemeral Postgres (container/script) for integration tests since workers use asyncpg. Use a Postgres or SQLite checkpointer as appropriate for your test setup (packages depend on both Postgres and SQLite checkpointers).
+- **Backend**: add API tests for new endpoints/behaviors, then validate manually via `/api/docs`.
+- **Frontend**: run in browser under Overmind and add/execute its tests via the app's own tooling (Overmind exposes port 3000).
 
-**Structure:** Each workflow needs its own folder with three files:
-```
-workflow_definitions/my_new_workflow/
-├── my_new_workflow.wirl      # DSL definition
-├── my_new_workflow.py        # Python implementation
-└── requirements.txt          # Dependencies
-```
+### Make targets (apps)
 
-**WIRL DSL Example:**
-```wirl
-workflow MyWorkflow {
-  metadata {
-    description: "My custom workflow"
-    owner: "developer"
-    version: "1.0"
-  }
+- **Backend** (`apps/backend`): `install`, `install-dev`, `run`, `test`, `format`, `lint`
+- **Workers** (`apps/workers`): `install`, `install-dev`, `run`, `test`, `format`, `lint`
+- **Root helpers**: `run_wirl_apps` (Overmind), `install-backend-deps`, `install-worker-deps`, `install-frontend-deps`
 
-  inputs {
-    String input_param
-  }
+---
 
-  outputs {
-    String result = ProcessData.output
-  }
+## 3) Working on or creating new workflows
 
-  node ProcessData {
-    call process_data_function
-    inputs {
-      String data = input_param
-    }
-    outputs {
-      String output
-    }
-  }
-}
+### Folder layout (one workflow per folder)
+
+```text
+workflow_definitions/<workflow_name>/
+  <workflow_name>.wirl         # the DSL
+  <workflow_name>.py           # pure functions called from the DSL
+  requirements.txt             # only what this workflow needs
+  tests/                       # at least one "happy path" test
+  README.md                    # what it does, setup (ENV, inputs/outputs)
 ```
 
-**Python Implementation Pattern:**
-```python
-def process_data_function(data: str, config: dict) -> dict:
-    # Process the data
-    result = f"Processed: {data}"
-    return {"output": result}
-```
+Per‑workflow requirements are installed by the root `workflows-setup` target.
 
-### How to Test
+### Function rules
 
-**Unit Testing:**
-- Test individual Python functions in workflow implementations
-- Test DSL parsing: `packages/wirl-lang/` contains parser tests
-- Test runner: `packages/wirl-pregel-runner/tests/` contains runner tests
+- **Pure functions only**. No shared mutable state. Names must match call identifiers in the `.wirl`. Arguments in Python must match node inputs, plus a trailing `config: dict`.
+- **Config** contains node `const { … }` merged with runner config; access `thread_id` at `config["configurable"]["thread_id"]`. Keep large prompts/helpers in separate modules.
+- **Constants, secrets, inputs**
+  - Put non‑PII constants in node `const { … }` (clear in VCS).
+  - Use ENV for secrets/private data.
+  - Pass truly dynamic values as workflow inputs.
 
-**Integration Testing:**
+  (Matches the example and runner patterns.)
+- **LLMs**: default to local models; prefer LangChain/LangGraph plumbing unless specified otherwise. (Runner depends on LangGraph; integrate LLM calls inside your Python steps as needed.)
+
+### Run & test workflows
+
+#### Unit‑style, with mocks (recommended pattern)
+
 ```bash
-# Test workflow end-to-end
-. .venv/bin/activate
-python -m wirl_pregel_runner.pregel_runner \
-  workflow_definitions/your_workflow/your_workflow.wirl \
-  --functions workflow_definitions.your_workflow.your_workflow \
-  --param param_name=param_value
+make test-workflow WORKFLOW=<workflow_name>     # runs pytest with the runner transiently available
 ```
 
-**Running Tests:**
+Your test should stub every node function, run the flow, and assert the final result and critical step outputs.
+
+#### End‑to‑end run from CLI
+
 ```bash
-# Run specific package tests
-cd packages/wirl-pregel-runner
-make test
-
-# Or use uv directly
-uv run pytest tests/
+make run-workflow \
+  WORKFLOW=<workflow_name> \
+  FUNCS=workflow_definitions.<workflow_name>.<workflow_name> \
+  PARAMS="key1=value1 key2=value2"
 ```
 
-### How to Run New Workflows
+This wraps `python -m wirl_pregel_runner.pregel_runner` ….
 
-**From Command Line:**
-```bash
-python -m wirl_pregel_runner.pregel_runner \
-  path/to/workflow.wirl \
-  --functions module.path.to.implementation \
-  --param key=value
-```
+---
 
-**From Frontend (when implemented):**
-- Workflows will be discoverable through the backend API
-- Frontend provides UI for parameter input and execution monitoring
-- Results displayed in web interface
+## Quick Overmind / ports / environment
 
-**Using GitHub Actions:**
-- Create workflow-specific GitHub Actions in `.github/workflows/`
-- Actions can trigger workflow execution on push/PR
-- Example pattern:
-```yaml
-name: Run My Workflow
-on: [push]
-jobs:
-  run-workflow:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: make workflows-setup
-      - name: Run workflow
-        run: |
-          . .venv/bin/activate
-          python -m wirl_pregel_runner.pregel_runner \
-            workflow_definitions/my_workflow/my_workflow.wirl \
-            --functions workflow_definitions.my_workflow.my_workflow
-```
+- **Start all**: `make run_wirl_apps` → Backend at <http://localhost:8000>, Frontend at <http://localhost:3000>. Attach to workers: `overmind connect workers` (detach with Ctrl‑b, then d).
+- **Required env**: `DATABASE_URL`, `WORKFLOW_DEFINITIONS_PATH` (set in `.env` at repo root).
 
-## Key Development Patterns
+---
 
-**Workflow Function Signature:**
-- All workflow functions take `(input_params..., config: dict) -> dict`
-- Return dictionary with keys matching WIRL output declarations
-- Use `config` for constants defined in WIRL
+## Appendix: Handy Make targets (root)
 
-**Error Handling:**
-- Use Python logging: `logger = logging.getLogger(__name__)`
-- Raise exceptions for workflow failures
-- Return structured data for successful operations
-
-**Dependencies:**
-- Each workflow manages its own `requirements.txt`
-- Install all workflow deps into shared `.venv` via `make workflows-setup`
-- Pin versions to avoid conflicts
-
-**VSCode Support:**
-- Install syntax extension from `extensions/vscode/`
-- Provides syntax highlighting for `.wirl` files
-- Package with `vsce package` and install locally
+- `workflows-setup`, `workflows-setup-dev` — bootstrap `.venv` + installs.
+- `test-workflow WORKFLOW=<name>` / `test-all-workflows`.
+- `run-workflow WORKFLOW=<name> FUNCS=<module> PARAMS="k=v …"`.
+- `run_wirl_apps` — Overmind all services via procfile.
+- `install-precommit`, `lint`.
