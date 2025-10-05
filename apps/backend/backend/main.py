@@ -10,19 +10,20 @@ from typing import Any, Iterable, Optional
 
 import dotenv
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
-from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 dotenv.load_dotenv()
 
+from langgraph.checkpoint.postgres import PostgresSaver  # noqa: E402
+
 from backend.database import get_session, init_db  # noqa: E402
 from backend.models import WorkflowRun  # noqa: E402
 from backend.workflow_loader import get_template, list_templates  # noqa: E402
-from langgraph.checkpoint.postgres import PostgresSaver  # noqa: E402
 
 
 class WorkflowStatus(str, Enum):
@@ -97,11 +98,7 @@ class TemplateInfo(BaseModel):
 
 
 def _filter_state(state: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in state.items()
-        if not key.startswith("branch:") and not key.startswith("__")
-    }
+    return {key: value for key, value in state.items() if not key.startswith("branch:") and not key.startswith("__")}
 
 
 def _extract_branch_targets(writes: Optional[Iterable[Any]]) -> deque[str]:
