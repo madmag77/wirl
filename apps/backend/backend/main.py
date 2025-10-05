@@ -117,12 +117,7 @@ def workflows_history(
     db: Session = Depends(get_session),
 ) -> WorkflowHistoryPage:
     total = db.scalar(select(func.count()).select_from(WorkflowRun)) or 0
-    result = db.execute(
-        select(WorkflowRun)
-        .order_by(WorkflowRun.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    result = db.execute(select(WorkflowRun).order_by(WorkflowRun.created_at.desc()).limit(limit).offset(offset))
     runs = result.scalars().all()
     items = [
         WorkflowHistory(

@@ -37,6 +37,7 @@ export default function App() {
 
   const workflowDetailsRef = useRef({})
   const isMountedRef = useRef(true)
+  const hasProcessedUrlRef = useRef(false)
 
   useEffect(() => {
     return () => {
@@ -174,10 +175,16 @@ export default function App() {
 
   // Handle deep linking with thread_id query parameter
   useEffect(() => {
+    // Only process the URL parameter once
+    if (hasProcessedUrlRef.current) {
+      return
+    }
+
     const params = new URLSearchParams(window.location.search)
     const threadId = params.get('thread_id')
 
     if (threadId) {
+      hasProcessedUrlRef.current = true
       // Wait a bit for workflows to load, then open the modal
       const timer = setTimeout(() => {
         const workflow = workflows.find(w => w.id === threadId)
