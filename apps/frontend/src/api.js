@@ -44,6 +44,16 @@ export async function getWorkflow(id) {
 }
 
 /**
+ * Fetch detailed run information for a workflow.
+ * @param {string} id
+ * @returns {Promise<WorkflowRunDetails>}
+ */
+export async function getWorkflowRunDetails(id) {
+  const resp = await fetch(`${BASE_URL}/workflows/${id}/run-details`)
+  return resp.json()
+}
+
+/**
  * Start a new workflow.
  * @param {string} template
  * @param {string} query

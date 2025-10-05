@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy import JSON, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -30,3 +32,74 @@ class WorkflowRun(Base):
     result: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
+
+
+class WorkflowStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    NEEDS_INPUT = "needs_input"
+    FAILED = "failed"
+    SUCCEEDED = "succeeded"
+    CANCELED = "canceled"
+
+
+# Pydantic models for request/response validation
+class StartWorkflowRequest(BaseModel):
+    template_name: str
+    inputs: dict = {}
+
+
+class ContinueWorkflowRequest(BaseModel):
+    inputs: dict = {}
+
+
+class WorkflowResponse(BaseModel):
+    id: str
+    status: WorkflowStatus
+    result: dict = {}
+
+
+class WorkflowDetail(BaseModel):
+    id: str
+    inputs: dict
+    template: str
+    status: WorkflowStatus
+    result: dict[str, Any]
+    error: Optional[str] = None
+
+
+class WorkflowHistory(BaseModel):
+    id: str
+    template: str
+    status: WorkflowStatus
+    created_at: str
+
+
+class WorkflowRunWrite(BaseModel):
+    channel: str
+    kind: str
+    value: Any
+
+
+class WorkflowRunStep(BaseModel):
+    step: int
+    checkpoint_id: str
+    timestamp: str
+    node: Optional[str]
+    task_id: str
+    input_state: dict[str, Any]
+    output_state: dict[str, Any]
+    branches: list[str]
+    writes: list[WorkflowRunWrite]
+
+
+class WorkflowRunDetails(BaseModel):
+    run_id: str
+    initial_state: dict[str, Any]
+    steps: list[WorkflowRunStep]
+
+
+class TemplateInfo(BaseModel):
+    id: str
+    name: str
+    path: str

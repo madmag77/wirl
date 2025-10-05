@@ -332,6 +332,29 @@ body {
   font-size: 0.9rem;
 }
 
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.secondary-btn {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 999px;
+  padding: 0.55rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.secondary-btn:hover {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
 .icon-btn {
   background: transparent;
   border: none;
@@ -460,6 +483,184 @@ body {
   justify-content: flex-end;
 }
 
+.run-details-modal {
+  width: 100%;
+  max-width: 1350px;
+  max-height: 90vh;
+  padding: 2.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.run-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.run-details-status {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.run-details-status.error {
+  color: var(--error-color);
+}
+
+.run-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.run-step-card {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 14px 35px -30px var(--shadow-color);
+}
+
+.run-step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.step-label {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.step-node {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
+}
+
+.step-meta {
+  display: flex;
+  gap: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.run-step-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.run-step-branches ul,
+.run-step-writes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.run-step-branches li {
+  background-color: var(--hover-color);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.run-step-writes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.run-step-writes li:last-child {
+  border-bottom: none;
+}
+
+.writes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.5rem;
+  margin: -0.5rem -0.5rem 0.5rem -0.5rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.writes-header:hover {
+  background-color: var(--hover-color);
+}
+
+.writes-header h5 {
+  margin: 0;
+}
+
+.step-duration {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.write-kind {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.write-kind-state {
+  background-color: #e0f2fe;
+  color: #0c4a6e;
+  border-color: #38bdf8;
+}
+
+.write-kind-branch {
+  background-color: #f5f3ff;
+  color: #5b21b6;
+  border-color: #c4b5fd;
+}
+
+.write-kind-system {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #f87171;
+}
+
+.write-channel {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.inline-pre {
+  display: inline-block;
+  padding: 0.4rem 0.6rem;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
@@ -482,6 +683,7 @@ body {
 }
 
 @media (max-width: 640px) {
+
   .workflow-table th,
   .workflow-table td {
     padding: 0.85rem 0.75rem;
