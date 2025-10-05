@@ -11,6 +11,14 @@
  */
 
 /**
+ * @typedef {Object} WorkflowHistoryPage
+ * @property {number} total
+ * @property {number} limit
+ * @property {number} offset
+ * @property {WorkflowHistory[]} items
+ */
+
+/**
  * @typedef {Object} WorkflowDetail
  * @property {string} id
  * @property {string} template
