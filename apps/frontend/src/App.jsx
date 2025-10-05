@@ -276,7 +276,8 @@ export default function App() {
   const handlePageChange = useCallback(
     async newOffset => {
       const pageLimit = pagination.limit || 10
-      const maxOffset = Math.max(pagination.total - pageLimit, 0)
+      // Clamp pagination offset to last page boundary
+      const maxOffset = Math.floor((pagination.total - 1) / pageLimit) * pageLimit
       const safeOffset = Math.min(Math.max(0, newOffset), maxOffset)
       await refreshAndSync({ fetchDetails: true, offset: safeOffset })
     },
