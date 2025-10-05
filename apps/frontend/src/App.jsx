@@ -8,6 +8,7 @@ import {
   getWorkflows,
   getWorkflowTemplates,
 } from './api.js'
+import WorkflowRunDetailsModal from './WorkflowRunDetailsModal.jsx'
 import { POLL_INTERVAL_MS } from './constants.js'
 import { startPolling } from './timer.js'
 
@@ -17,6 +18,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [selected, setSelected] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showRunDetailsModal, setShowRunDetailsModal] = useState(false)
+  const [runDetailsId, setRunDetailsId] = useState(null)
   const [showInterrupt, setShowInterrupt] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     inputs: true,
@@ -347,6 +350,18 @@ export default function App() {
     setShowDetailsModal(false)
     setShowInterrupt(false)
     setAnswer('')
+    setShowRunDetailsModal(false)
+    setRunDetailsId(null)
+  }
+
+  const openRunDetailsModal = id => {
+    setRunDetailsId(id)
+    setShowRunDetailsModal(true)
+  }
+
+  const closeRunDetailsModal = () => {
+    setShowRunDetailsModal(false)
+    setRunDetailsId(null)
   }
 
   const handleRetry = async id => {
@@ -483,7 +498,15 @@ export default function App() {
                 <h3>{selected.template}</h3>
                 <p className="modal-subtitle">Detailed run information</p>
               </div>
-              <button className="icon-btn" onClick={closeDetailsModal} aria-label="Close details">×</button>
+              <div className="modal-header-actions">
+                <button
+                  className="secondary-btn"
+                  onClick={() => openRunDetailsModal(selected.id)}
+                >
+                  View Run Details
+                </button>
+                <button className="icon-btn" onClick={closeDetailsModal} aria-label="Close details">×</button>
+              </div>
             </div>
 
             <div className="detail-grid">
@@ -586,6 +609,9 @@ export default function App() {
             )}
           </div>
         </div>
+      )}
+      {showRunDetailsModal && runDetailsId && (
+        <WorkflowRunDetailsModal runId={runDetailsId} onClose={closeRunDetailsModal} />
       )}
     </div>
   )
