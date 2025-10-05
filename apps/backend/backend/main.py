@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 from typing import Any, Iterable, Optional
 
 import dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 dotenv.load_dotenv()
@@ -26,6 +26,7 @@ from backend.models import (  # noqa: E402
     TemplateInfo,
     WorkflowDetail,
     WorkflowHistory,
+    WorkflowHistoryPage,
     WorkflowResponse,
     WorkflowRun,
     WorkflowRunDetails,
@@ -110,10 +111,20 @@ def templates() -> list[TemplateInfo]:
 
 
 @app.get("/workflows", operation_id="getWorkflows")
-def workflows_history(db: Session = Depends(get_session)) -> list[WorkflowHistory]:
-    result = db.execute(select(WorkflowRun))
+def workflows_history(
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_session),
+) -> WorkflowHistoryPage:
+    total = db.scalar(select(func.count()).select_from(WorkflowRun)) or 0
+    result = db.execute(
+        select(WorkflowRun)
+        .order_by(WorkflowRun.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     runs = result.scalars().all()
-    return [
+    items = [
         WorkflowHistory(
             id=r.id,
             template=r.graph_name,
@@ -122,6 +133,7 @@ def workflows_history(db: Session = Depends(get_session)) -> list[WorkflowHistor
         )
         for r in runs
     ]
+    return WorkflowHistoryPage(total=int(total), limit=limit, offset=offset, items=items)
 
 
 @app.get("/workflows/{workflow_run_id}", operation_id="getWorkflowDetails")

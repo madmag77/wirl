@@ -75,6 +75,13 @@ class WorkflowHistory(BaseModel):
     created_at: str
 
 
+class WorkflowHistoryPage(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[WorkflowHistory]
+
+
 class WorkflowRunWrite(BaseModel):
     channel: str
     kind: str

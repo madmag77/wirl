@@ -5,12 +5,17 @@ const BASE_URL = API_BASE_URL
 
 /**
  * Fetch list of workflow runs.
- * @returns {Promise<WorkflowHistory[]>}
+ * @param {Object} [options]
+ * @param {number} [options.limit]
+ * @param {number} [options.offset]
+ * @returns {Promise<WorkflowHistoryPage>}
  */
-export async function getWorkflows() {
+export async function getWorkflows({ limit = 10, offset = 0 } = {}) {
   try {
-    console.log('Fetching workflows from:', `${BASE_URL}/workflows`)
-    const resp = await fetch(`${BASE_URL}/workflows`)
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    const url = `${BASE_URL}/workflows?${params.toString()}`
+    console.log('Fetching workflows from:', url)
+    const resp = await fetch(url)
     console.log('Response status:', resp.status, resp.statusText)
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)

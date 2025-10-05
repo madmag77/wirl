@@ -9,11 +9,14 @@ import {
   getWorkflowTemplates,
 } from './api.js'
 import WorkflowRunDetailsModal from './WorkflowRunDetailsModal.jsx'
+import WorkflowRunsTable from './components/WorkflowRunsTable.jsx'
 import { POLL_INTERVAL_MS } from './constants.js'
 import { startPolling } from './timer.js'
+import { formatDateTime } from './utils/date.js'
 
 export default function App() {
   const [workflows, setWorkflows] = useState([])
+  const [pagination, setPagination] = useState({ limit: 10, offset: 0, total: 0 })
   const [workflowDetails, setWorkflowDetails] = useState({})
   const [selectedId, setSelectedId] = useState(null)
   const [selected, setSelected] = useState(null)
@@ -41,64 +44,89 @@ export default function App() {
     }
   }, [])
 
-  const refreshWorkflows = useCallback(async (fetchDetails = false) => {
-    const list = await getWorkflows()
-    setWorkflows(list)
-
-    // Only fetch details when explicitly requested or for new workflows
-    if (fetchDetails) {
-      const detailEntries = await Promise.all(
-        list.map(async workflow => {
-          try {
-            // Only fetch if we don't have details or workflow is running
-            if (!workflowDetailsRef.current[workflow.id] || workflow.status === 'running') {
-              const detail = await getWorkflow(workflow.id)
-              return [workflow.id, detail]
-            }
-            return [workflow.id, workflowDetailsRef.current[workflow.id]]
-          } catch (error) {
-            console.error('Failed to fetch workflow detail', error)
-            return null
-          }
-        })
-      )
-
-      if (!isMountedRef.current) {
-        return list
+  const syncSelection = useCallback(list => {
+    setSelectedId(current => {
+      if (current && list.some(item => item.id === current)) {
+        return current
       }
-
-      const nextDetails = {}
-      for (const workflow of list) {
-        const detailEntry = detailEntries.find(entry => entry && entry[0] === workflow.id)
-        if (detailEntry) {
-          nextDetails[workflow.id] = detailEntry[1]
-        } else if (workflowDetailsRef.current[workflow.id]) {
-          nextDetails[workflow.id] = workflowDetailsRef.current[workflow.id]
-        }
+      if (list.length > 0) {
+        return list[0].id
       }
-
-      workflowDetailsRef.current = nextDetails
-      setWorkflowDetails(nextDetails)
-    }
-
-    return list
+      return null
+    })
   }, [])
+
+  const refreshWorkflows = useCallback(
+    async ({ fetchDetails = false, limit, offset } = {}) => {
+      const query = {
+        limit: limit ?? pagination.limit,
+        offset: offset ?? pagination.offset
+      }
+      const data = await getWorkflows(query)
+      const list = data.items ?? []
+      setWorkflows(list)
+      setPagination({
+        limit: data.limit ?? query.limit,
+        offset: data.offset ?? query.offset,
+        total: data.total ?? list.length
+      })
+
+      // Only fetch details when explicitly requested or for new workflows
+      if (fetchDetails) {
+        const detailEntries = await Promise.all(
+          list.map(async workflow => {
+            try {
+              // Only fetch if we don't have details or workflow is running
+              if (!workflowDetailsRef.current[workflow.id] || workflow.status === 'running') {
+                const detail = await getWorkflow(workflow.id)
+                return [workflow.id, detail]
+              }
+              return [workflow.id, workflowDetailsRef.current[workflow.id]]
+            } catch (error) {
+              console.error('Failed to fetch workflow detail', error)
+              return null
+            }
+          })
+        )
+
+        if (!isMountedRef.current) {
+          return list
+        }
+
+        const nextDetails = {}
+        for (const workflow of list) {
+          const detailEntry = detailEntries.find(entry => entry && entry[0] === workflow.id)
+          if (detailEntry) {
+            nextDetails[workflow.id] = detailEntry[1]
+          } else if (workflowDetailsRef.current[workflow.id]) {
+            nextDetails[workflow.id] = workflowDetailsRef.current[workflow.id]
+          }
+        }
+
+        workflowDetailsRef.current = nextDetails
+        setWorkflowDetails(nextDetails)
+      }
+
+      return list
+    },
+    [pagination.limit, pagination.offset]
+  )
+
+  const refreshAndSync = useCallback(
+    async options => {
+      const list = await refreshWorkflows(options)
+      syncSelection(list)
+      return list
+    },
+    [refreshWorkflows, syncSelection]
+  )
 
   useEffect(() => {
     let intervalId
     let timeoutId
 
-    const load = async (fetchDetails = false) => {
-      const data = await refreshWorkflows(fetchDetails)
-      setSelectedId(current => {
-        if (current && data.some(item => item.id === current)) {
-          return current
-        }
-        if (data.length > 0) {
-          return data[0].id
-        }
-        return null
-      })
+    const load = async (options = {}) => {
+      const data = await refreshAndSync(options)
       return data
     }
 
@@ -107,12 +135,12 @@ export default function App() {
       if (intervalId) clearInterval(intervalId)
       if (timeoutId) clearTimeout(timeoutId)
 
-      const data = await load(true) // Fetch details on initial load
+      const data = await load({ fetchDetails: true }) // Fetch details on initial load
       const hasRunningWorkflows = data.some(workflow => workflow.status === 'running')
 
       if (hasRunningWorkflows) {
         intervalId = startPolling(async () => {
-          const updatedData = await load(false) // Don't fetch details on every poll
+          const updatedData = await load({ fetchDetails: false }) // Don't fetch details on every poll
           const stillHasRunning = updatedData.some(workflow => workflow.status === 'running')
           if (!stillHasRunning) {
             clearInterval(intervalId)
@@ -133,7 +161,7 @@ export default function App() {
       if (intervalId) clearInterval(intervalId)
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [refreshWorkflows])
+  }, [refreshAndSync])
 
   useEffect(() => {
     getWorkflowTemplates().then(data => {
@@ -238,6 +266,16 @@ export default function App() {
     }
   }, [selected])
 
+  const handlePageChange = useCallback(
+    async newOffset => {
+      const pageLimit = pagination.limit || 10
+      const maxOffset = Math.max(pagination.total - pageLimit, 0)
+      const safeOffset = Math.min(Math.max(0, newOffset), maxOffset)
+      await refreshAndSync({ fetchDetails: true, offset: safeOffset })
+    },
+    [pagination.limit, pagination.total, refreshAndSync]
+  )
+
   const openStartModal = () => {
     setNewQuery('')
     if (templates.length > 0) {
@@ -306,15 +344,6 @@ export default function App() {
     }))
   }
 
-  const formatDateTime = value => {
-    if (!value) return '—'
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) {
-      return value
-    }
-    return date.toLocaleString()
-  }
-
 
   const openDetailsModal = id => {
     setExpandedSections({ inputs: true, results: true, error: true })
@@ -375,17 +404,6 @@ export default function App() {
     }
   }
 
-  const sortedWorkflows = [...workflows].sort((a, b) => {
-    const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0
-    const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0
-    return bTime - aTime
-  })
-
-  console.log('Current workflows state:', workflows)
-  console.log('Sorted workflows for table:', sortedWorkflows)
-
-  const getDetailForRow = id => workflowDetails[id] ?? null
-
   const getCreatedAtForSelected = () => {
     const current = workflows.find(item => item.id === selected?.id)
     return current?.created_at
@@ -403,69 +421,16 @@ export default function App() {
         <button className="primary-btn" onClick={openStartModal}>Start New Workflow</button>
       </header>
       <main className="app-main">
-        <div className="table-card">
-          <table className="workflow-table" role="table">
-            <thead>
-              <tr>
-                <th scope="col">Date &amp; Time</th>
-                <th scope="col">Workflow</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="actions-header">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedWorkflows.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="empty-state">No workflow runs yet. Start a workflow to see it here.</td>
-                </tr>
-              ) : (
-                sortedWorkflows.map(workflow => {
-                  const detail = getDetailForRow(workflow.id)
-                  return (
-                    <tr
-                      key={workflow.id}
-                      className="workflow-row"
-                      onClick={() => openDetailsModal(workflow.id)}
-                      data-testid={`workflow-row-${workflow.id}`}
-                    >
-                      <td>{formatDateTime(workflow.created_at)}</td>
-                      <td>{detail?.template ?? workflow.template}</td>
-                      <td>
-                        <span className={`status-pill status-${workflow.status.replace(/[\s_]+/g, '-').toLowerCase()}`}>
-                          {workflow.status}
-                        </span>
-                      </td>
-                      <td className="actions-cell">
-                        {workflow.status === 'failed' && (
-                          <button
-                            className="table-continue-btn"
-                            onClick={event => {
-                              event.stopPropagation()
-                              handleRetry(workflow.id)
-                            }}
-                          >
-                            Retry
-                          </button>
-                        )}
-                        {workflow.status === 'needs_input' && (
-                          <button
-                            className="table-continue-btn"
-                            onClick={event => {
-                              event.stopPropagation()
-                              openDetailsModal(workflow.id)
-                            }}
-                          >
-                            Continue
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <WorkflowRunsTable
+          workflows={workflows}
+          workflowDetails={workflowDetails}
+          pagination={pagination}
+          onSelectRun={openDetailsModal}
+          onRetry={handleRetry}
+          onContinue={openDetailsModal}
+          onPageChange={handlePageChange}
+          formatDateTime={formatDateTime}
+        />
       </main>
 
       {showStartModal && (
