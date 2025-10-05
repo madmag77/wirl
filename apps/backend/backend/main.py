@@ -5,7 +5,6 @@ import os
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
-from enum import Enum
 from typing import Any, Iterable, Optional
 
 import dotenv
@@ -13,7 +12,6 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,79 +20,20 @@ dotenv.load_dotenv()
 from langgraph.checkpoint.postgres import PostgresSaver  # noqa: E402
 
 from backend.database import get_session, init_db  # noqa: E402
-from backend.models import WorkflowRun  # noqa: E402
+from backend.models import (  # noqa: E402
+    ContinueWorkflowRequest,
+    StartWorkflowRequest,
+    TemplateInfo,
+    WorkflowDetail,
+    WorkflowHistory,
+    WorkflowResponse,
+    WorkflowRun,
+    WorkflowRunDetails,
+    WorkflowRunStep,
+    WorkflowRunWrite,
+    WorkflowStatus,
+)
 from backend.workflow_loader import get_template, list_templates  # noqa: E402
-
-
-class WorkflowStatus(str, Enum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    NEEDS_INPUT = "needs_input"
-    FAILED = "failed"
-    SUCCEEDED = "succeeded"
-    CANCELED = "canceled"
-
-
-# Pydantic models for request/response validation
-class StartWorkflowRequest(BaseModel):
-    template_name: str
-    inputs: dict = {}
-
-
-class ContinueWorkflowRequest(BaseModel):
-    inputs: dict = {}
-
-
-class WorkflowResponse(BaseModel):
-    id: str
-    status: WorkflowStatus
-    result: dict = {}
-
-
-class WorkflowDetail(BaseModel):
-    id: str
-    inputs: dict
-    template: str
-    status: WorkflowStatus
-    result: dict[str, Any]
-    error: Optional[str] = None
-
-
-class WorkflowHistory(BaseModel):
-    id: str
-    template: str
-    status: WorkflowStatus
-    created_at: str
-
-
-class WorkflowRunWrite(BaseModel):
-    channel: str
-    kind: str
-    value: Any
-
-
-class WorkflowRunStep(BaseModel):
-    step: int
-    checkpoint_id: str
-    timestamp: str
-    node: Optional[str]
-    task_id: str
-    input_state: dict[str, Any]
-    output_state: dict[str, Any]
-    branches: list[str]
-    writes: list[WorkflowRunWrite]
-
-
-class WorkflowRunDetails(BaseModel):
-    run_id: str
-    initial_state: dict[str, Any]
-    steps: list[WorkflowRunStep]
-
-
-class TemplateInfo(BaseModel):
-    id: str
-    name: str
-    path: str
 
 
 def _filter_state(state: dict[str, Any]) -> dict[str, Any]:
