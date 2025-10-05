@@ -1,0 +1,103 @@
+workflow AutoraterEvalWorkflow {
+
+  metadata {
+    description: "Evaluate autorater performance on HotpotQA dataset"
+    owner: "assistant"
+    version: "1.0"
+  }
+
+  inputs {
+    String dataset_path
+    Int sample_size
+  }
+
+  outputs {
+    Object<EvaluationMetrics> metrics = AnalyzeResults.metrics
+  }
+
+  node LoadDataset {
+    call load_dataset
+    inputs {
+      String dataset_path = dataset_path
+      Int sample_size = sample_size
+    }
+    outputs {
+      List<Object<DatasetItem>> dataset_items
+      Int total_samples
+    }
+  }
+
+  cycle EvaluationLoop {
+    inputs {
+      List<Object<DatasetItem>> initial_items = LoadDataset.dataset_items
+      List<Object<DatasetItem>> remaining_items = ProcessNextSample.remaining_items
+    }
+    outputs {
+      List<Object<EvaluationResult>> results = CollectResults.results
+    }
+
+    node ProcessNextSample {
+      call process_next_sample
+      inputs {
+        List<Object<DatasetItem>> items = EvaluationLoop.remaining_items?
+        List<Object<DatasetItem>> initial_items = EvaluationLoop.initial_items
+      }
+      outputs {
+        Object<DatasetItem> current_item
+        List<Object<DatasetItem>> remaining_items
+        Bool no_items_left
+      }
+    }
+
+    node AutorateItem {
+      call autorate_item
+      inputs {
+        Object<DatasetItem> item = ProcessNextSample.current_item
+      }
+      const {
+        model: "gemma3:12b"
+        model_type: "ollama"
+        base_url: "http://localhost:1234/v1"
+      }
+      outputs {
+        Object<EvaluationResult> result
+      }
+    }
+
+    node CollectResults {
+      call collect_results
+      inputs {
+        Object<EvaluationResult> result = AutorateItem.result?
+        List<Object<DatasetItem>> remaining_items = ProcessNextSample.remaining_items?
+        Bool no_items_left = ProcessNextSample.no_items_left?
+      }
+      when {
+        ProcessNextSample.no_items_left or AutorateItem.result
+      }
+      outputs {
+        Bool is_done
+        (append) List<Object<EvaluationResult>> results
+      }
+    }
+
+    guard {
+      inputs {
+        Bool is_done = CollectResults.is_done
+      }
+      when {
+        CollectResults.is_done
+      }
+    }
+    max_iterations: 100
+  }
+
+  node AnalyzeResults {
+    call analyze_results
+    inputs {
+      List<Object<EvaluationResult>> results = EvaluationLoop.results
+    }
+    outputs {
+      Object<EvaluationMetrics> metrics
+    }
+  }
+}
