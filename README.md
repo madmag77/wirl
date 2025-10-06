@@ -80,14 +80,11 @@ scripts/mac-install-launchctl
 
 Add a GitHub Actions workflow (example: infra/github_actions_document_sort.yaml) or any scheduler/trigger that suits your environment.
 
-
 ## UI at a glance
 
-- **Runs list** with paging. [[main.png]]
-- **View Run Details** for a single run: step timeline, status, retry count, and captured **inputs/outputs** per node. [[run_details.png]]
-- **HITL** page to approve or edit at workflow checkpoints, then resume execution.[[hitl.png]]
-
-
+- **Runs list** with paging. ![runs list](images/main.png?raw=true "Runs list")
+- **View Run Details** for a single run: step timeline, status, retry count, and captured **inputs/outputs** per node. ![run details](images/run_details.png?raw=true "Run's details")
+- **HITL** page to approve or edit at workflow checkpoints, then resume execution.![hitl](images/hitl.png?raw=true "HITL")
 
 ## Examples
 
