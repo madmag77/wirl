@@ -1,197 +1,35 @@
-# WIRL — Workflow DSL and Runner
+# WIRL — Explicit Workflows with Human Checkpoints
 
-WIRL is a compact workflow DSL that compiles to an explicit directed graph (nodes, cycles with guards, reducers) and a Python runner that executes those graphs on a Pregel-like model.
+WIRL is a lightweight **DSL**, **runner**, and **set of apps** for automating routines with **deterministic, inspectable** workflow graphs. Workflows support **retries**, **branching**, **cycles**, and **Human‑in‑the‑Loop (HITL)** as first‑class concepts. LLMs are pluggable (local or hosted), while control‑flow remains fixed and auditable.
 
-This repository contains:
-- DSL grammar and parser (`packages/wirl-lang`)
-- Pregel-based runner (`packages/wirl-pregel-runner`)
-- Example workflows (`workflow_definitions/`)
-- Dev tooling (Procfile, VSCode syntax extension, macOS launchctl template)
+## When this is useful
 
-## Repo structure
-- `packages/wirl-lang/` — DSL grammar (`wirl.bnf`) and parser. See `packages/wirl-lang/README.md`.
-- `packages/wirl-pregel-runner/` — Runner on top of LangGraph Pregel. See `packages/wirl-pregel-runner/README.md`.
-- `workflow_definitions/` — Example and real workflows; each workflow keeps its Python step code and its own `requirements.txt`.
-- `extensions/vscode/` — VSCode extension for `.wirl` syntax highlighting.
-- `apps/` — Backend/frontends (placeholders for now).
-- `infra/macos/` — macOS `launchctl` template.
-- `scripts/` — Helper scripts (mac install, docker, postgres).
+1. You’re exploring ways to automate personal or work routines.
+2. You like Python/LangGraph, but scaling beyond 1–2 ad‑hoc workflows became messy (state, reuse, approvals, retries).
+3. You tried n8n/low‑code, but the visual model is heavy, hard for AI to modify, and versioning/custom code gets awkward.
+4. You want reproducible research/AI pipelines with checkpoints and retries, without adopting a full MLOps stack.
+5. You prefer workflow **descriptions** that are human‑readable and AI‑generatable, separated cleanly from infra and the runner.
 
-## Prerequisites
-- Python 3.11+
-- uv package manager (`pip install uv` or see docs)
-- macOS users for PDF workflows: Poppler (`brew install poppler`) for `pdf2image`
+## Quickstart
 
-Optional (for process supervision/local services):
-- Overmind (`brew install overmind`)
+### Prerequisites
 
-## Quick start
-Install local packages and per-workflow dependencies into a repo-local virtualenv.
+- Python **3.11+**
+- uv (recommended) or pip
+- Optional: an OpenAI‑compatible endpoint (e.g., **Ollama** locally or a hosted API)
 
-```bash
+### Install
+
+``` bash
+git clone https://github.com/madmag77/wirl
+cd wirl
 make workflows-setup
-```
-What it does:
-- Creates `.venv/` via `uv venv`
-- Installs local packages editable: `packages/wirl-lang`, `packages/wirl-pregel-runner`
-- Finds all `workflow_definitions/**/requirements.txt` and installs them into `.venv`
-- Leaves placeholders for backend/workers deps
-
-If you prefer manual steps:
-```bash
-uv venv .venv
-uv pip install --python .venv/bin/python -e packages/wirl-lang
-uv pip install --python .venv/bin/python -e packages/wirl-pregel-runner
-# install per-workflow deps
-find workflow_definitions -type f -name requirements.txt -print0 | \
-  xargs -0 -I {} uv pip install --python .venv/bin/python -r {}
+# creates .venv, installs local packages, and installs per-workflow requirements
 ```
 
-## Run an example workflow
-The example `PaperRenameWorkflow` reads the first pages of PDFs, extracts metadata with a VLM, and renames the files.
+### Run a workflow from the terminal
 
-Requirements:
-- Poppler installed: `brew install poppler`
-- A local or remote OpenAI-compatible endpoint (e.g., Ollama with OpenAI API, OpenRouter, etc.) — the example uses a base URL like `http://localhost:11434/v1/` and a placeholder API key.
-
-Command:
-```bash
-. .venv/bin/activate
-python -m wirl_pregel_runner.pregel_runner \
-  workflow_definitions/paper_rename_workflow/paper_rename_workflow.wirl \
-  --functions workflow_definitions.paper_rename_workflow.paper_rename_workflow \
-  --param drafts_folder_path=/absolute/path/to/drafts \
-  --param processed_folder_path=/absolute/path/to/processed
-```
-Notes:
-- The functions module (`--functions`) is the Python file that implements the `call` targets in the `.wirl`.
-- For the VLM, set your base URL/model in the workflow constants or code, and ensure an API key if required.
-
-## Per-workflow dependencies
-Each workflow can declare its own Python requirements in a `requirements.txt` placed next to its `.wirl` and step code. Example:
-```
-workflow_definitions/<workflow_name>/
-  <workflow_name>.wirl
-  <workflow_name>.py
-  requirements.txt
-```
-- The Makefile target installs all such requirements into `.venv`.
-- You can pin per-workflow versions without impacting other workflows.
-- Optionally maintain a repo-level `constraints.txt` and pass `-c constraints.txt` if you prefer central pinning.
-
-## Running on macOS
-
-### Runnning postgres
-First Postgres needs to be installed. On Macos it's possible to use `container` service or `docker`.
-
-In case of `container`:
-1. Install container using this [link](https://github.com/apple/container/releases)
-2. Run it: `container system start`
-3. Run the following script, which will pull postgres image and run it:
-```bash
-chmod +x scripts/macos/container-start-postgres.sh
-./scripts/macos/container-start-postgres.sh
-```
-
-Now the services can be run.
-
-### Installing dependencies
-```bash
-# Install overmind
-brew install overmind
-
-# Install all dependencies
-make workflows-setup
-# or installing all dependencies in Dev mode if you want to make changes in apps and test them
-make workflows-setup-dev
-
-# create .env file in the root of the project with two vars
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows # in case you use local postgres
-WORKFLOW_DEFINITIONS_PATH=/Users/username/wirl/workflow_definitions # absolute path to workflow definitions
-```
-
-### Option 1: Manual with Overmind (Development)
-Run all apps locally using `overmind` and the included `Procfile`:
-
-```bash
-# Start all services (postgres, backend, workers, frontend)
-overmind start
-# or
-make run_wirl_apps
-```
-
-Services will run on:
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- Postgres: via Docker container
-
-### Option 2: Auto-start Service (Production)
-Install as a macOS LaunchAgent service that starts automatically on system start:
-
-```bash
-# One-command installation
-chmod +x scripts/macos/mac-install-launchctl.sh
-./scripts/macos/mac-install-launchctl.sh
-```
-
-This script will:
-- Install overmind (if missing)
-- Generate plist from template with your system paths
-- Install and load the LaunchAgent service
-- Verify everything is running
-
-**Service Management:**
-```bash
-# Check status
-launchctl list | grep com.local.wirl.overmind
-
-# View logs
-tail -f ~/.local/log/wirl-workflows-overmind.out
-
-# Uninstall service
-./scripts/macos/mac-install-launchctl.sh --uninstall
-```
-
-## Development
-- DSL and parser: see `packages/wirl-lang/README.md` for API (`parse_wirl_to_objects`) and grammar notes.
-- Runner: see `packages/wirl-pregel-runner/README.md` for API and CLI usage.
-- VSCode syntax: `extensions/vscode/README.md` for packaging and local install.
-
-## Creating your workflows
-
-1) Create a new workflow folder and three files
-
-```
-workflow_definitions/<workflow_name>/
-  <workflow_name>.wirl            # DSL definition
-  <workflow_name>.py              # Python implementation of functions referenced in the DSL
-  requirements.txt                # Workflow-specific dependencies (only what this workflow needs)
-```
-
-2) Write tests for your workflow
-
-- Place tests under `workflow_definitions/<workflow_name>/tests/`.
-- Start by testing the DSL in isolation using the runner with stubbed functions, mirroring the pattern from `packages/wirl-pregel-runner/tests/test_wirl_with_cycles_runner.py`.
-- Example command (no permanent dependency; uses a transient runner install):
-
-```bash
-uv run --with ./packages/wirl-pregel-runner -- pytest workflow_definitions/<workflow_name>/tests -q
-```
-
-- You can also use the Makefile shortcut from the repo root:
-
-```bash
-make test-workflow WORKFLOW=<workflow_name>  # adds runner transiently and runs pytest
-```
-
-3) Implement and unit-test Python functions
-
-- Implement the functions referenced by `call` statements in `<workflow_name>.py`.
-- Unit-test those Python functions directly (pure pytest) without the runner where it makes sense.
-
-4) Run the workflow end-to-end
-
-- Use the provided Makefile target to run a workflow from its DSL file, pointing to your Python functions module and passing input params:
+Use the provided Make target:
 
 ```bash
 make run-workflow \
@@ -200,10 +38,193 @@ make run-workflow \
   PARAMS="key1=value1 key2=value2"
 ```
 
-Notes:
-- `WORKFLOW` is the directory name under `workflow_definitions/`.
-- `FUNCS` is the import path to the module exposing the functions used in the `.wirl` file.
-- `PARAMS` is optional; specify space-separated key=value pairs that match your workflow inputs.
+Example — **Paper rename**:
 
-## License
-MIT — see `LICENSE` at the repo root.
+```bash
+make run-workflow \
+  WORKFLOW=paper_rename_workflow \
+  FUNCS=workflow_definitions.paper_rename_workflow.paper_rename_workflow \
+  PARAMS='drafts_folder_path="/Users/username/Library/Mobile Documents/com~apple~CloudDocs/papers_unsorted" processed_folder_path="/Users/username/Library/Mobile Documents/com~apple~CloudDocs/papers_sorted"'
+```
+
+If you already have **Ollama** installed or plan to use a commercial LLM API, you can run most workflows immediately.
+
+### Start the apps/platform (optional but recommended for HITL + observability)
+
+To run regularly, see run history, and perform approvals, bring up the backend and frontend:
+1. Provision **Postgres** (Docker, a local install, or a free Supabase instance). For Mac (latest versoin only) users there is a script at `scripts/container-start-postgres.sh` that sets up the container with postgres for you.
+2. Export the Postgres connection environment variables required by the backend (e.g., DATABASE_URL, for local setup it's `postgresql://postgres:postgres@localhost:5432/workflows`).
+3. Set environment variable `WORKFLOW_DEFINITIONS_PATH` to the absolute path to workflow definitions. Like this:
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows
+WORKFLOW_DEFINITIONS_PATH=/Users/username/wirl/workflow_definitions
+```
+4. Start the apps:
+``` bash
+make run_wirl_apps   # or: overmind start
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:8000
+```
+
+With the apps running you can **start, continue, retry**, and provide **HITL inputs** from the UI. The runs list now supports **paging**, and each run exposes **View Run Details** to inspect every step’s inputs and outputs.
+
+### Autostart on macOS
+
+To run the apps automatically after reboot:
+
+```bash
+scripts/mac-install-launchctl
+```
+
+### Schedule runs (optional)
+
+Add a GitHub Actions workflow (example: infra/github_actions_document_sort.yaml) or any scheduler/trigger that suits your environment.
+
+
+## UI at a glance
+
+- **Runs list** with paging. [[main.png]]
+- **View Run Details** for a single run: step timeline, status, retry count, and captured **inputs/outputs** per node. [[run_details.png]]
+- **HITL** page to approve or edit at workflow checkpoints, then resume execution.[[hitl.png]]
+
+
+
+## Examples
+
+There are four example workflows (three are used daily):
+
+1. **Paper rename**
+    You save papers to papers_unsorted with unreadable names (e.g., 2411.06037v3.pdf). This workflow reads new PDFs, uses a **vision‑capable model** via an OpenAI‑compatible endpoint (e.g., Ollama) to extract **title/author/year** from the first pages, and saves the file with a proper name in papers_sorted. You only consult the sorted folder.
+2. **News digest**
+    You provide sources. Each morning the workflow checks for new posts since the last run, summarizes them with a local LLM, and emails a digest with links. You read the digest and open only what matters.
+3. **Photo → notes (HITL)**
+    Many people snap photos/screenshots instead of writing notes (announcements, tracking numbers, invoices). The workflow collects yesterday’s images from a designated folder (Automator/Shortcuts can assist on macOS to fill this folder with your last photos), extracts useful info with a vision model, and emails you a report plus a link to the local **HITL** page. You open a link and write simple instructions (“keep only the tracking number with a description”, “make a note from this invoice”), and the workflow applies them and writes the final note to **Obsidian** or any `md` based note-taking system.
+4. **AutoRater evaluation (new)**
+    A reproducible evaluation pipeline inspired by Google’s “autorater” idea: sample items (e.g., from **HotpotQA**), run **model‑as‑judge** prompts to assess whether context is sufficient prior to answering, aggregate metrics, and export a report. Extend with multiple rater models and a reduce step to compare systems.
+
+## Developers’ section
+
+### What you get
+
+- **DSL**: A compact, readable language to declare nodes, edges, typed IO, when branches, cycle{... guard ...} loops, and **hitl{...}** checkpoints.
+- **Runner**: Pregel‑style execution with **checkpointing**, **retries**, **resume**, and **HITL** pause/resume built in.
+- **Apps**: Backend + workers + frontend for approvals and observability
+
+### Repository layout (high level)
+```
+packages/
+  wirl-lang/             # DSL grammar + parser
+  wirl-pregel-runner/    # Pregel-style runner, checkpoints, HITL
+workflow_definitions/
+  paper_rename_workflow/
+  ...
+extensions/vscode/       # syntax highlighting for VS Code/Cursor
+apps/                    # frontend + workers + backend (HITL + runs UI)
+scripts/                 # setup/launch helpers
+infra/                   # macOS launchctl, CI examples, etc.
+```
+
+### Authoring model
+
+- **Separate the plan from the code.**
+  - The **graph** lives in a .wirl file. This is the “plan”: nodes, edges, branches, cycles, guards, and HITL.
+  - The **logic** lives in **pure Python** functions that match each node’s call target.
+- **LLM‑friendly flow.**
+    1. Use Cursor/Windsurf to generate the .wirl graph from a natural‑language description. There is a very detailed `Agents.md` file to help LLMs do it with good quality.
+    2. Generate the Python module with node functions (pure, testable).
+    3. Review the .wirl diff to verify control‑flow instantly.
+- **Deterministic control‑flow.**
+    Models can be stochastic; the **graph is not**. Guards and cycle limits are explicit and reviewable.
+
+### **Writing node functions (pattern)**
+
+- Keep functions **pure** and **idempotent** where possible.
+- Use simple, typed inputs/outputs.
+- Avoid hidden globals and side effects besides intentional outputs.
+
+``` python
+# workflow_definitions/your_flow/steps.py
+from dataclasses import dataclass
+from typing import List, Tuple
+
+@dataclass
+class PhotoInfo:
+    path: str
+
+def get_photos(folder: str, days_back: int) -> List[PhotoInfo]:
+    ...
+
+def extract_note(image_b64: str) -> str:
+    ...
+
+def append_and_check(notes: List[str], note: str, remaining: List[PhotoInfo]) -> Tuple[List[str], bool]:
+    # returns (updated_notes, is_done)
+    ...
+```
+
+### **Running a workflow (CLI)**
+
+``` bash
+python -m wirl_pregel_runner.pregel_runner \
+  workflow_definitions/<name>/<name>.wirl \
+  --functions workflow_definitions.<name>.<module> \
+  --param key=value --param other=val
+```
+
+Or via Make:
+
+``` bash
+make run-workflow \
+  WORKFLOW=<name> \
+  FUNCS=workflow_definitions.<name>.<module> \
+  PARAMS="key1=value1 key2=value2"
+```
+
+### **Observability**
+
+- **Runs list** (paged).
+- **Run details** with **inputs/outputs per node**, timestamps, durations, retry counts.
+- **Checkpoints** at every node allow precise **resume** and **retry**.
+
+### **HITL (Human‑in‑the‑Loop)**
+
+- Declare a checkpoint with hitl { correlation: "...", timeout: "..." }. Those parameters are not being used and preserved for future implementation.
+- The runner pauses and persists state.
+- Approvers act in the UI; the run resumes from the checkpoint with the decision recorded.
+
+### **Configuration**
+
+- **LLM endpoints**: Any OpenAI‑compatible base URL/key (Ollama locally or hosted APIs).
+- **Database**: Postgres for run metadata and checkpoints (set DATABASE_URL or the backend’s required env vars).
+- **Secrets**: Provide via env vars; swap for your secret manager as needed.
+- **Scheduling**: cron, LaunchAgents/systemd, containers, or GitHub Actions (see infra/).
+
+### **Adding a new workflow**
+
+1. Create workflow_definitions/<your_workflow>/.
+2. Add <your_workflow>.wirl (graph) and <your_workflow>.py (node functions).
+3. (Optional) Add requirements.txt scoped to this workflow.
+4. Run:
+```bash
+make run-workflow \
+  WORKFLOW=<your_workflow> \
+  FUNCS=workflow_definitions.<your_workflow>.<your_workflow> \
+  PARAMS="..."
+```
+5. Inspect in the UI, use **View Run Details**, iterate.
+
+### **Development tips**
+
+- Keep node IO **simple, serializable**, and **explicit**.
+- Reuse functions across workflows; treat .wirl files as the configuration surface.
+- Favor **guarded loops** over unbounded iteration.
+- Capture enough per‑node IO to debug, but redact sensitive fields when needed.
+
+## What doesn't work and yet to be fixed
+- Types in workflows are not being used now, they are only for you and LLM to understand the workflow better
+- Cycles are only sequential for now, there is a plan to introduce parallel execution at scale
+- Parameters in HITL block (correlation and timeout) are not being used
+- There are no first class concept "retry" implemented yet (ideally you should be able to mark any node as retryable with parameters)
+
+## **License**
+MIT.
