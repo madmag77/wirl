@@ -184,37 +184,28 @@ export default function App() {
     const threadId = params.get('thread_id')
 
     if (threadId) {
-      hasProcessedUrlRef.current = true
-      // Wait a bit for workflows to load, then open the modal
-      const timer = setTimeout(() => {
-        const workflow = workflows.find(w => w.id === threadId)
-        if (workflow) {
-          openDetailsModal(threadId)
-        } else {
-          // If not in list yet, try to fetch it directly
-          getWorkflow(threadId).then(data => {
-            workflowDetailsRef.current = {
-              ...workflowDetailsRef.current,
-              [data.id]: data
-            }
-            setWorkflowDetails(current => ({
-              ...current,
-              [data.id]: data
-            }))
-            setSelectedId(threadId)
-            setShowDetailsModal(true)
-            if (data.status === 'needs_input') {
-              setShowInterrupt(true)
-            }
-          }).catch(error => {
-            console.error('Failed to fetch workflow from URL', error)
-          })
+      // Try to fetch the workflow directly without waiting
+      getWorkflow(threadId).then(data => {
+        hasProcessedUrlRef.current = true
+        workflowDetailsRef.current = {
+          ...workflowDetailsRef.current,
+          [data.id]: data
         }
-      }, 100)
-
-      return () => clearTimeout(timer)
+        setWorkflowDetails(current => ({
+          ...current,
+          [data.id]: data
+        }))
+        setSelectedId(threadId)
+        setShowDetailsModal(true)
+        if (data.status === 'needs_input') {
+          setShowInterrupt(true)
+        }
+      }).catch(error => {
+        console.error('Failed to fetch workflow from URL', error)
+        hasProcessedUrlRef.current = true
+      })
     }
-  }, [workflows])
+  }, [])
 
   useEffect(() => {
     if (!selectedId) {

@@ -137,7 +137,7 @@ test('canceling new workflow does not start it', async () => {
   await screen.findByText('Start')
   fireEvent.click(screen.getByText('Cancel'))
 
-  await waitFor(() => {})
+  await waitFor(() => { })
   expect(fetch).not.toHaveBeenCalledWith('/workflows', expect.objectContaining({ method: 'POST' }))
 })
 
@@ -225,7 +225,7 @@ test('canceling waiting workflow does not send continue request', async () => {
   await screen.findByPlaceholderText('Enter your answer...')
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-  await waitFor(() => {})
+  await waitFor(() => { })
   expect(fetch).not.toHaveBeenCalledWith('/workflows/7/continue', expect.objectContaining({ method: 'POST' }))
 })
 
@@ -338,4 +338,45 @@ test('does not poll selected workflow when not running', async () => {
 
   const timer = require('./timer')
   await waitFor(() => expect(timer.startPolling).toHaveBeenCalledTimes(1))
+})
+
+test('opens modal when thread_id is in URL query parameter', async () => {
+  const originalSearch = window.location.search
+  delete window.location
+  window.location = { search: '?thread_id=hitl-123' }
+
+  const workflows = [
+    { id: 'hitl-123', template: 'deepresearch', status: 'needs_input', created_at: '2024-06-01T10:00:00Z' }
+  ]
+  const details = {
+    'hitl-123': {
+      id: 'hitl-123',
+      template: 'deepresearch',
+      status: 'needs_input',
+      inputs: {},
+      result: { __interrupt__: [{ value: { questions: ['What is your answer?'] } }] }
+    }
+  }
+
+  fetch.mockImplementation(url => {
+    if (url === '/workflows') {
+      return mockResponse(workflows)
+    }
+    if (url === '/workflow-templates') {
+      return mockResponse([])
+    }
+    if (url === '/workflows/hitl-123') {
+      return mockResponse(details['hitl-123'])
+    }
+    return mockResponse({})
+  })
+
+  render(<App />)
+
+  // Modal should open automatically with the workflow details
+  await screen.findByText('What is your answer?')
+  expect(screen.getByPlaceholderText('Enter your answer...')).toBeInTheDocument()
+
+  // Restore original location
+  window.location.search = originalSearch
 })
