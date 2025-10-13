@@ -70,7 +70,7 @@ def get_next_resource(
 
 def fetch_news(resource: NewsResource, config: dict) -> dict:
     days_back = config.get("days_back", 7)
-    model = config.get("model")
+    model = config.get("model") or "qwen3:8b"
     reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
     start_date = datetime.utcnow() - timedelta(days=days_back)
@@ -114,7 +114,6 @@ def fetch_news(resource: NewsResource, config: dict) -> dict:
                     temperature=temperature,
                     validate_model_on_init=True,
                     reasoning=reasoning,
-                    timeout=120,
                 )
                 llm_news_item = llm.with_structured_output(
                     NewsItems, method="json_schema"
@@ -172,7 +171,7 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
     if not news_items:
         return {"summary": "No new items."}
 
-    model = config.get("model")
+    model = config.get("model") or "gpt-oss:20b"
     reasoning = config.get("reasoning", False)
     temperature = config.get("temperature", 0)
 
@@ -181,7 +180,6 @@ def summarize_news(news_items: list[NewsItem], config: dict) -> dict:
         reasoning=reasoning,
         temperature=temperature,
         validate_model_on_init=True,
-        timeout=120,
     )
 
     for item in news_items:

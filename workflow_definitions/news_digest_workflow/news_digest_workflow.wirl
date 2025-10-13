@@ -43,7 +43,7 @@ workflow NewsDigestWorkflow {
       }
       const {
         days_back: 1
-        model: "qwen3:8b"
+        model: "deepseek-r1:8b"
         reasoning: True
         temperature: 0
       }
