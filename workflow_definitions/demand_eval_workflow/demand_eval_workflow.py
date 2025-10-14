@@ -353,6 +353,9 @@ Format as JSON with keys: reasoning (string), price_sensitivity (string), recomm
             golden_embedding = np.array(embeddings.embed_query(golden_text))
             similarity = cosine_similarity(intent_embedding, golden_embedding)
 
+            # We just choose the best similarity score
+            # In the paper they normalise the similarities and calculate pmf (probability mass function)
+            # in order to choose the best match
             if similarity > best_similarity:
                 best_similarity = similarity
                 best_match_rating = rating
