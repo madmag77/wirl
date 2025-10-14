@@ -1,0 +1,110 @@
+workflow DemandEvalWorkflow {
+
+  metadata {
+    description: "Evaluate product demand using LLM-simulated personas with diverse demographics"
+    owner: "assistant"
+    version: "1.0"
+  }
+
+  inputs {
+    String product_name
+    String product_description
+    Int num_personas
+  }
+
+  outputs {
+    Object<DemandMetrics> metrics = AnalyzeDemand.metrics
+    List<Object<PersonaEvaluation>> evaluations = EvaluationLoop.evaluations
+  }
+
+  node GeneratePersonas {
+    call generate_personas
+    inputs {
+      Int num_personas = num_personas
+    }
+    const {
+      model: "gemma3:12b"
+    }
+    outputs {
+      List<Object<Persona>> personas
+    }
+  }
+
+  cycle EvaluationLoop {
+    inputs {
+      List<Object<Persona>> initial_personas = GeneratePersonas.personas
+      List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas
+      String product_name = product_name
+      String product_description = product_description
+    }
+    outputs {
+      List<Object<PersonaEvaluation>> evaluations = CollectEvaluations.evaluations
+    }
+
+    node ProcessNextPersona {
+      call process_next_persona
+      inputs {
+        List<Object<Persona>> personas = EvaluationLoop.remaining_personas?
+        List<Object<Persona>> initial_personas = EvaluationLoop.initial_personas
+      }
+      outputs {
+        Object<Persona> current_persona
+        List<Object<Persona>> remaining_personas
+        Bool no_personas_left
+      }
+    }
+
+    node EvaluateProduct {
+      call evaluate_product
+      inputs {
+        Object<Persona> persona = ProcessNextPersona.current_persona
+        String product_name = EvaluationLoop.product_name
+        String product_description = EvaluationLoop.product_description
+      }
+      const {
+        model: "gemma3:12b"
+        embedding_model: "nomic-embed-text"
+      }
+      outputs {
+        Object<PersonaEvaluation> evaluation
+      }
+    }
+
+    node CollectEvaluations {
+      call collect_evaluations
+      inputs {
+        Object<PersonaEvaluation> evaluation = EvaluateProduct.evaluation?
+        List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas?
+        Bool no_personas_left = ProcessNextPersona.no_personas_left?
+      }
+      when {
+        ProcessNextPersona.no_personas_left or EvaluateProduct.evaluation
+      }
+      outputs {
+        Bool is_done
+        (append) List<Object<PersonaEvaluation>> evaluations
+      }
+    }
+
+    guard {
+      inputs {
+        Bool is_done = CollectEvaluations.is_done
+      }
+      when {
+        CollectEvaluations.is_done
+      }
+    }
+    max_iterations: 100
+  }
+
+  node AnalyzeDemand {
+    call analyze_demand
+    inputs {
+      List<Object<PersonaEvaluation>> evaluations = EvaluationLoop.evaluations
+      String product_name = product_name
+    }
+    outputs {
+      Object<DemandMetrics> metrics
+    }
+  }
+}
