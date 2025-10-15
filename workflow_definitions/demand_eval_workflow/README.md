@@ -2,9 +2,9 @@
 
 ## Overview
 
-This workflow evaluates product demand using LLM-simulated personas with diverse demographics. It implements the core methodology from the research paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings."
+This workflow evaluates product demand using LLM-simulated personas with diverse demographics. It implements the core methodology from the research paper [LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings.](https://arxiv.org/pdf/2510.08338)
 
-The workflow generates synthetic personas with varying demographic attributes (age, gender, income, education, location, lifestyle, values) and has each persona evaluate a product to provide purchase intent ratings on a 7-point Likert scale. The results are aggregated to provide comprehensive demand metrics and demographic insights.
+The workflow generates synthetic personas with varying demographic attributes (age, gender, income, education, location, lifestyle, values) and has each persona evaluate a product to provide purchase intent ratings on a 5-point Likert scale. The results are aggregated to provide comprehensive demand metrics and demographic insights.
 
 ## Research Foundation & Methodology
 
@@ -18,9 +18,14 @@ Instead of asking LLMs for numeric ratings directly (which can be biased), the w
 
 2. **Vectorizes the response**: Uses embedding models (Nomic via Ollama) to convert the text into a vector representation
 
-3. **Compares to golden intents**: Calculates cosine similarity between the response and 7 pre-defined "golden" intent descriptions that represent each point on the Likert scale
+3. **Compares to golden intents**: Calculates cosine similarity between the response and 5 pre-defined "golden" intent descriptions that represent each point on the Likert scale
 
-4. **Maps to rating**: Assigns the rating (1-7) of the golden intent with highest similarity
+4. **Computes expected rating**: Uses a probability-based approach:
+   - Calculates similarities to all 5 golden intents
+   - Subtracts minimum similarity to shift the range
+   - Normalizes to create a probability distribution
+   - Computes expected rating as weighted sum: rating = Σ(rating_i × probability_i)
+   - Returns a continuous value (e.g., 3.6) rather than discrete integers
 
 ### Why This Approach Works
 
@@ -31,14 +36,23 @@ Instead of asking LLMs for numeric ratings directly (which can be biased), the w
 
 ### Golden Intent Descriptions
 
-The workflow uses these canonical descriptions for mapping:
+The workflow uses these canonical descriptions for the 5-point scale:
 - **1**: "I would definitely not purchase... no interest whatsoever"
 - **2**: "I would probably not purchase... doesn't appeal to me"
-- **3**: "I am somewhat unlikely... not convinced it's right for me"
-- **4**: "I might or might not... neutral about it"
-- **5**: "I would probably purchase... seems like a good fit"
-- **6**: "I would very likely purchase... appeals strongly"
-- **7**: "I would definitely purchase... exactly what I'm looking for"
+- **3**: "I might or might not... neutral about it"
+- **4**: "I would probably purchase... seems like a good fit"
+- **5**: "I would definitely purchase... exactly what I'm looking for"
+
+### Example Calculation
+
+For a response: *"I'm somewhat interested; if the price is fair, I'd try it."*
+
+1. Cosine similarities to 5 anchors: [0.82, 0.86, 0.90, 0.95, 0.88]
+2. Subtract min (0.82): [0.00, 0.04, 0.08, 0.13, 0.06]
+3. Normalize: p ≈ [0.00, 0.14, 0.27, 0.43, 0.16]
+4. Expected rating = 1×0 + 2×0.14 + 3×0.27 + 4×0.43 + 5×0.16 ≈ **3.6**
+
+This probability-weighted approach provides more nuanced ratings than simple "best match" selection.
 
 ## Workflow Architecture
 
@@ -46,6 +60,7 @@ The workflow uses these canonical descriptions for mapping:
 - `product_name` (String): Name of the product to evaluate
 - `product_description` (String): Detailed description of the product
 - `num_personas` (Int): Number of synthetic personas to generate (recommended: 20-100)
+- `report_path` (String): Directory path where the Markdown report will be saved
 
 ### Outputs
 - `metrics` (DemandMetrics): Aggregated demand metrics including:
@@ -55,6 +70,8 @@ The workflow uses these canonical descriptions for mapping:
   - Demographic insights (purchase intent by age, income, location)
   - Total number of personas evaluated
 - `evaluations` (List<PersonaEvaluation>): Individual evaluations from each persona
+
+**Note:** A comprehensive Markdown report is automatically generated and saved to `report_path` with a timestamped filename.
 
 ### Workflow Steps
 
@@ -68,8 +85,8 @@ The workflow uses these canonical descriptions for mapping:
    - **EvaluateProduct**: Has each persona provide:
      - **Textual purchase intent** (not numeric) - describes their intent in natural language
      - Converts text to vector using **Nomic embeddings**
-     - Calculates **cosine similarity** to golden intent descriptions
-     - Maps to **1-7 Likert scale** based on best match
+     - Calculates **cosine similarity** to all 5 golden intent descriptions
+     - Computes **expected rating** (1-5 continuous scale) using probability-weighted approach
      - Also captures reasoning, price sensitivity, and recommendation intent
    - **CollectEvaluations**: Accumulates evaluation results with similarity scores
 
@@ -77,6 +94,13 @@ The workflow uses these canonical descriptions for mapping:
    - Calculates mean, standard deviation, and distribution statistics
    - Breaks down purchase intent by demographic segments
    - Identifies high-intent segments for targeted marketing
+
+4. **SaveReport**: Generates comprehensive Markdown report
+   - Creates timestamped report file: `demand_eval_ProductName_YYYYMMDD_HHMMSS.md`
+   - Includes product details, metrics, demographic insights, and recommendations
+   - Automatic demand assessment (Strong 🟢 / Moderate 🟡 / Low 🔴)
+   - Actionable recommendations tailored to demand level
+   - Saved to specified `report_path` directory
 
 ## Setup
 
@@ -135,7 +159,7 @@ Run the workflow directly from the command line without starting backend/workers
 make run-workflow \
   WORKFLOW=demand_eval_workflow \
   FUNCS=workflow_definitions.demand_eval_workflow.demand_eval_workflow \
-  PARAMS="product_name='Smart Water Bottle' product_description='AI-powered hydration tracking bottle with app connectivity' num_personas=20"
+  PARAMS="product_name='Smart Water Bottle' product_description='AI-powered hydration tracking bottle with app connectivity' num_personas=20 report_path='./reports'"
 ```
 
 **More examples:**
@@ -145,19 +169,19 @@ make run-workflow \
 make run-workflow \
   WORKFLOW=demand_eval_workflow \
   FUNCS=workflow_definitions.demand_eval_workflow.demand_eval_workflow \
-  PARAMS="product_name='Project Management Tool' product_description='Cloud-based collaboration platform for remote teams' num_personas=30"
+  PARAMS="product_name='Project Management Tool' product_description='Cloud-based collaboration platform for remote teams' num_personas=30 report_path='./reports'"
 
 # Evaluate a consumer electronics product with 50 personas
 make run-workflow \
   WORKFLOW=demand_eval_workflow \
   FUNCS=workflow_definitions.demand_eval_workflow.demand_eval_workflow \
-  PARAMS="product_name='Wireless Earbuds' product_description='Noise-canceling earbuds with 24-hour battery life' num_personas=50"
+  PARAMS="product_name='Wireless Earbuds' product_description='Noise-canceling earbuds with 24-hour battery life' num_personas=50 report_path='./reports'"
 
 # Quick test with fewer personas
 make run-workflow \
   WORKFLOW=demand_eval_workflow \
   FUNCS=workflow_definitions.demand_eval_workflow.demand_eval_workflow \
-  PARAMS="product_name='Smart Speaker' product_description='Voice-activated assistant with premium sound' num_personas=10"
+  PARAMS="product_name='Smart Speaker' product_description='Voice-activated assistant with premium sound' num_personas=10 report_path='./reports'"
 ```
 
 **Note:** This runs the workflow synchronously and outputs results to the terminal. For production use with multiple workflows, use the API approach below.
@@ -183,33 +207,90 @@ curl -X POST "http://localhost:8000/api/workflows/start" \
     "inputs": {
       "product_name": "Smart Water Bottle",
       "product_description": "AI-powered hydration tracking bottle with app connectivity",
-      "num_personas": 30
+      "num_personas": 30,
+      "report_path": "/absolute/path/to/reports"
     }
   }'
 ```
 
-### Example Output
+### Generated Report
+
+After the workflow completes, a comprehensive Markdown report is automatically generated with the following sections:
+
+#### Report Filename
+`demand_eval_ProductName_20251015_083806.md`
+
+Reports include timestamp to track multiple evaluations over time.
+
+#### Report Contents
+
+1. **Product Information**: Name, description, number of personas evaluated
+2. **Executive Summary**: Key metrics with visual indicators
+3. **Demand Assessment**: Automatic categorization (Strong 🟢, Moderate 🟡, Low 🔴)
+4. **Demographic Insights**: Sorted table showing purchase intent by segment
+5. **Key Findings**: Highest/lowest intent segments and recommended targets
+6. **Methodology**: Explanation of semantic similarity approach
+7. **Recommendations**: Actionable next steps based on demand level
+8. **Next Steps**: Concrete actions for validation and iteration
+
+**Example Report Excerpt:**
+
+```markdown
+# Demand Evaluation Report: Smart Water Bottle
+
+**Generated:** 2025-10-15 08:38:06
+
+## Executive Summary
+
+### Overall Purchase Intent
+- **Mean Purchase Intent:** 4.20 / 5.0
+- **Standard Deviation:** 0.80
+- **Mean Recommendation Score:** 4.40 / 5.0
+
+### Intent Distribution
+| Category | Percentage |
+|----------|-----------|
+| **High Intent** (≥ 4.0) | 65.0% |
+| **Medium Intent** (2.5 - 4.0) | 25.0% |
+| **Low Intent** (< 2.5) | 10.0% |
+
+## Demand Assessment
+
+**Strong Demand** 🟢
+
+The product shows strong market demand with high purchase intent...
+
+## Demographic Insights
+| Demographic Segment | Mean Purchase Intent |
+|---------------------|---------------------|
+| Income High | 4.80 |
+| Age 18-35 | 4.50 |
+| Location Urban | 4.40 |
+...
+```
+
+### Workflow Output (JSON)
 
 **Metrics Summary:**
 ```json
 {
   "metrics": {
-    "mean_purchase_intent": 5.2,
-    "std_purchase_intent": 1.3,
-    "high_intent_percentage": 65.0,
-    "medium_intent_percentage": 25.0,
+    "mean_purchase_intent": 3.8,
+    "std_purchase_intent": 0.9,
+    "high_intent_percentage": 60.0,
+    "medium_intent_percentage": 30.0,
     "low_intent_percentage": 10.0,
-    "mean_recommendation": 5.8,
+    "mean_recommendation": 4.1,
     "demographic_insights": {
-      "age_18-35": 5.8,
-      "age_36-55": 5.0,
-      "age_56+": 4.5,
-      "income_Low": 3.9,
-      "income_Medium": 5.1,
-      "income_High": 6.2,
-      "location_Urban": 5.7,
-      "location_Suburban": 5.0,
-      "location_Rural": 4.8
+      "age_18-35": 4.2,
+      "age_36-55": 3.7,
+      "age_56+": 3.3,
+      "income_Low": 2.9,
+      "income_Medium": 3.8,
+      "income_High": 4.5,
+      "location_Urban": 4.0,
+      "location_Suburban": 3.7,
+      "location_Rural": 3.5
     },
     "total_personas": 30
   }
@@ -226,26 +307,31 @@ curl -X POST "http://localhost:8000/api/workflows/start" \
     "occupation": "Product Manager"
   },
   "intent_text": "I would very likely purchase this product. As someone who values innovation and convenience, this Smart Water Bottle fits perfectly into my active lifestyle. The AI-powered features would help me stay on top of my hydration goals.",
-  "purchase_intent": 6,
+  "purchase_intent": 4.3,
   "similarity_score": 0.87,
   "reasoning": "Aligns with my values for innovation and health tracking",
   "price_sensitivity": "Low",
-  "likelihood_to_recommend": 7
+  "likelihood_to_recommend": 4.6
 }
 ```
 
-Note: The `similarity_score` (0.87) indicates high confidence in the rating assignment - the persona's textual intent closely matched the golden intent description for rating 6.
+**Note:**
+- Ratings are continuous values (e.g., 4.3) computed as probability-weighted expected values, not integers
+- The `similarity_score` (0.87) represents the maximum similarity to any golden intent anchor
+- Higher similarity scores indicate clearer, more confident intent expressions
 
 ## Interpretation
 
-### Purchase Intent Scale
-- **1-2**: Definitely would NOT purchase (Low intent)
-- **3-4**: Somewhat unlikely to purchase (Medium intent)
-- **5-7**: Likely to definitely purchase (High intent)
+### Purchase Intent Scale (5-point continuous)
+- **< 2.5**: Definitely would NOT purchase (Low intent)
+- **2.5 - 4.0**: Neutral to somewhat interested (Medium intent)
+- **≥ 4.0**: Likely to definitely purchase (High intent)
+
+Note: Ratings are continuous values (e.g., 3.6) computed using probability-weighted semantic similarity, providing more nuanced insights than discrete integer ratings.
 
 ### Key Metrics
 
-- **Mean Purchase Intent**: Overall average interest (target: >5.0 for strong demand)
+- **Mean Purchase Intent**: Overall average interest (target: >3.5 for strong demand on 5-point scale)
 - **High Intent %**: Percentage of personas likely to purchase (target: >50%)
 - **Demographic Insights**: Identifies which segments show strongest interest
   - Use to target marketing and product positioning
@@ -254,10 +340,29 @@ Note: The `similarity_score` (0.87) indicates high confidence in the rating assi
 ### Use Cases
 
 1. **Product Concept Testing**: Validate new product ideas before development
+   - Generate comprehensive reports to share with stakeholders
+   - Compare multiple product variations by running separate evaluations
+
 2. **Market Segmentation**: Identify which demographics to target
+   - Reports automatically highlight highest-intent segments
+   - Use demographic insights table to prioritize marketing spend
+
 3. **Pricing Strategy**: Correlate price sensitivity with purchase intent
+   - Track evaluations over time with timestamped reports
+   - A/B test different price points in product descriptions
+
 4. **Marketing Copy**: Use persona reasoning to craft compelling messages
+   - Review individual evaluations for qualitative insights
+   - Extract common themes from high-intent personas
+
 5. **Feature Prioritization**: Test variations to see which features resonate
+   - Generate reports for different feature sets
+   - Compare demand metrics across product configurations
+
+6. **Stakeholder Communication**: Professional reports for decision-making
+   - Markdown format easy to convert to PDF or presentations
+   - Actionable recommendations included automatically
+   - Visual indicators (🟢🟡🔴) for quick assessment
 
 ## Testing
 
@@ -278,18 +383,27 @@ Tests include:
 
 ## Configuration Options
 
-Customize behavior via `const` blocks in the WIRL file:
+Customize behavior via `const` blocks in the WIRL file or input parameters:
 
-### GeneratePersonas
+### Input Parameters
+- `product_name`: Product name (appears in report title and filename)
+- `product_description`: Detailed description for persona evaluation
+- `num_personas`: Number of personas to generate (20-100 recommended)
+- `report_path`: Directory for saving reports (created if doesn't exist)
+
+### GeneratePersonas Node
 - `model`: LLM model to use (default: "gemma3:12b")
 - `temperature`: Creativity level (default: 0.8 for diversity)
 - `model_type`: "ollama" or "openai"
 
-### EvaluateProduct
+### EvaluateProduct Node
 - `model`: LLM model for text generation (default: "gemma3:12b")
 - `temperature`: Response variability (default: 0.7)
 - `embedding_model`: Model for vectorization (default: "nomic-embed-text")
 - `model_type`: "ollama" or "openai"
+
+### SaveReport Node
+No configuration needed - automatically generates reports based on metrics
 
 ## Limitations & Considerations
 
@@ -299,7 +413,10 @@ Customize behavior via `const` blocks in the WIRL file:
 4. **Cultural Context**: Ensure the LLM is trained on relevant cultural contexts
 5. **Sample Size**: Larger persona counts (50-100+) provide more reliable statistics
 6. **Validation**: Consider running pilot studies with real users to validate synthetic results
-7. **Golden Intent Calibration**: The 7 golden intents are calibrated for general product evaluation; you may customize them for specific domains
+7. **Golden Intent Calibration**: The 5 golden intents are calibrated for general product evaluation; you may customize them for specific domains
+8. **Continuous Ratings**: Ratings are computed as expected values (e.g., 3.6), providing more granular insights than discrete integers
+9. **Report Storage**: Reports are saved locally; ensure adequate disk space and appropriate file permissions for `report_path`
+10. **Timestamp Collisions**: Running multiple evaluations in the same second may need manual handling
 
 ## Research Citation
 
@@ -309,12 +426,16 @@ If using this workflow for research, consider citing the foundational work:
 ## Future Enhancements
 
 Potential extensions:
-- A/B testing: Compare multiple product variations
-- Temporal dynamics: Simulate adoption curves over time
-- Social influence: Model word-of-mouth and network effects
-- Competitive analysis: Compare against alternative products
-- Sentiment analysis: Extract qualitative themes from reasoning
-- Human-in-the-loop: Allow manual review/adjustment of personas
+- **A/B testing**: Batch compare multiple product variations in single workflow
+- **Temporal dynamics**: Simulate adoption curves over time
+- **Social influence**: Model word-of-mouth and network effects
+- **Competitive analysis**: Compare against alternative products in one report
+- **Sentiment analysis**: Extract qualitative themes from reasoning
+- **Human-in-the-loop**: Allow manual review/adjustment of personas
+- **Report formats**: Export to PDF, HTML, or PowerPoint
+- **Interactive dashboards**: Web-based visualization of metrics
+- **Trend analysis**: Compare reports over time to track product evolution
+- **Custom templates**: Allow custom report sections/branding
 
 ## Support
 
@@ -323,3 +444,26 @@ For issues or questions:
 2. Review AGENTS.md for development guidelines
 3. Verify LLM models are properly installed (`ollama list`)
 4. Check logs for detailed error messages
+5. Ensure `report_path` directory is writable
+6. Review generated reports in `report_path` directory
+
+## Report Tips
+
+**Best Practices:**
+- Use descriptive product names (they appear in report titles)
+- Store reports in version control for historical tracking
+- Create dated subdirectories (e.g., `reports/2025-10/`) for organization
+- Share reports with stakeholders in Markdown or convert to PDF
+- Compare reports across product iterations to track improvements
+- Archive reports with product version tags for reference
+
+**Report Organization Example:**
+```
+reports/
+├── 2025-10/
+│   ├── demand_eval_Smart_Water_Bottle_v1_20251015_083806.md
+│   ├── demand_eval_Smart_Water_Bottle_v2_20251015_143022.md
+│   └── demand_eval_Fitness_Tracker_20251016_091234.md
+└── 2025-11/
+    └── demand_eval_Smart_Watch_Pro_20251101_100000.md
+```

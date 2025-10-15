@@ -10,6 +10,7 @@ workflow DemandEvalWorkflow {
     String product_name
     String product_description
     Int num_personas
+    String report_path
   }
 
   outputs {
@@ -105,6 +106,20 @@ workflow DemandEvalWorkflow {
     }
     outputs {
       Object<DemandMetrics> metrics
+    }
+  }
+
+  node SaveReport {
+    call save_report
+    inputs {
+      String product_name = product_name
+      String product_description = product_description
+      Int num_personas = num_personas
+      Object<DemandMetrics> metrics = AnalyzeDemand.metrics
+      String report_path = report_path
+    }
+    outputs {
+      Object<DemandMetrics> final_metrics
     }
   }
 }
