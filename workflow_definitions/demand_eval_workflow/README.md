@@ -16,7 +16,7 @@ Instead of asking LLMs for numeric ratings directly (which can be biased), the w
 
 1. **Asks for TEXTUAL purchase intent**: The LLM describes their purchase intent in natural language (e.g., "I would very likely purchase this product because...")
 
-2. **Vectorizes the response**: Uses embedding models (Nomic via Ollama) to convert the text into a vector representation
+2. **Vectorizes the response**: Uses embedding models (like Nomic via Ollama) to convert the text into a vector representation
 
 3. **Compares to golden intents**: Calculates cosine similarity between the response and 5 pre-defined "golden" intent descriptions that represent each point on the Likert scale
 
@@ -86,12 +86,13 @@ This probability-weighted approach provides more nuanced ratings than simple "be
 
 2. **EvaluationLoop**: Iterates through each persona to evaluate the product
    - **ProcessNextPersona**: Manages iteration through personas
-   - **EvaluateProduct**: Has each persona provide:
-     - **Textual purchase intent** (not numeric) - describes their intent in natural language
+   - **GetPurchaseIntent**: Gets **textual purchase intent** from each persona
+     - Uses LLM to elicit natural language description of purchase intent (not numeric)
+     - Avoids rating bias by asking for words instead of numbers
+   - **CalculatePersonaMetrics**: Converts intent text to rating using semantic similarity
      - Converts text to vector using **Nomic embeddings**
      - Calculates **cosine similarity** to all 5 golden intent descriptions
      - Computes **expected rating** (1-5 continuous scale) using probability-weighted approach
-     - Also captures reasoning, price sensitivity, and recommendation intent
    - **CollectEvaluations**: Accumulates evaluation results with similarity scores
 
 3. **AnalyzeDemand**: Computes aggregate metrics and demographic insights
@@ -250,7 +251,6 @@ Reports include timestamp to track multiple evaluations over time.
 ### Overall Purchase Intent
 - **Mean Purchase Intent:** 4.20 / 5.0
 - **Standard Deviation:** 0.80
-- **Mean Recommendation Score:** 4.40 / 5.0
 
 ### Intent Distribution
 | Category | Percentage |
@@ -297,7 +297,6 @@ The product shows strong market demand with high purchase intent...
     "high_intent_percentage": 60.0,
     "medium_intent_percentage": 30.0,
     "low_intent_percentage": 10.0,
-    "mean_recommendation": 4.1,
     "demographic_insights": {
       "age_18-35": 4.2,
       "age_36-55": 3.7,
@@ -327,9 +326,6 @@ The product shows strong market demand with high purchase intent...
   "intent_text": "I would very likely purchase this product. As someone who values innovation and convenience, this Smart Water Bottle fits perfectly into my active lifestyle. The AI-powered features would help me stay on top of my hydration goals.",
   "purchase_intent": 4.3,
   "similarity_score": 0.87,
-  "reasoning": "Aligns with my values for innovation and health tracking",
-  "price_sensitivity": "Low",
-  "likelihood_to_recommend": 4.6,
   "pmfs": [0.05, 0.10, 0.15, 0.35, 0.35]
 }
 ```
@@ -372,9 +368,9 @@ Note: Ratings are continuous values (e.g., 3.6) computed using probability-weigh
    - Track evaluations over time with timestamped reports
    - A/B test different price points in product descriptions
 
-4. **Marketing Copy**: Use persona reasoning to craft compelling messages
+4. **Marketing Copy**: Use persona intent descriptions to craft compelling messages
    - Review individual evaluations for qualitative insights
-   - Extract common themes from high-intent personas
+   - Extract common themes from high-intent persona intent text
 
 5. **Feature Prioritization**: Test variations to see which features resonate
    - Generate reports for different feature sets
@@ -417,11 +413,13 @@ Customize behavior via `const` blocks in the WIRL file or input parameters:
 - `temperature`: Creativity level (default: 0.8 for diversity)
 - `model_type`: "ollama" or "openai"
 
-### EvaluateProduct Node
+### GetPurchaseIntent Node
 - `model`: LLM model for text generation (default: "gemma3:12b")
 - `temperature`: Response variability (default: 0.7)
-- `embedding_model`: Model for vectorization (default: "nomic-embed-text")
 - `model_type`: "ollama" or "openai"
+
+### CalculatePersonaMetrics Node
+- `embedding_model`: Model for vectorization (default: "nomic-embed-text")
 
 ### SaveReport Node
 No configuration needed - automatically generates reports based on metrics
@@ -438,6 +436,7 @@ No configuration needed - automatically generates reports based on metrics
 8. **Continuous Ratings**: Ratings are computed as expected values (e.g., 3.6), providing more granular insights than discrete integers
 9. **Report Storage**: Reports are saved locally; ensure adequate disk space and appropriate file permissions for `report_path`
 10. **Timestamp Collisions**: Running multiple evaluations in the same second may need manual handling
+11. **Streamlined Data Model**: This implementation focuses on core purchase intent metric only, without additional attributes like price sensitivity or recommendation likelihood
 
 ## Research Citation
 
@@ -451,7 +450,7 @@ Potential extensions:
 - **Temporal dynamics**: Simulate adoption curves over time
 - **Social influence**: Model word-of-mouth and network effects
 - **Competitive analysis**: Compare against alternative products in one report
-- **Sentiment analysis**: Extract qualitative themes from reasoning
+- **Sentiment analysis**: Extract qualitative themes from intent descriptions
 - **Human-in-the-loop**: Allow manual review/adjustment of personas
 - **Report formats**: Export to PDF, HTML, or PowerPoint
 - **Interactive dashboards**: Web-based visualization of metrics

@@ -24,7 +24,7 @@ workflow DemandEvalWorkflow {
       Int num_personas = num_personas
     }
     const {
-      model: "gemma3:12b"
+      model: "gpt-oss:20b"
     }
     outputs {
       List<Object<Persona>> personas
@@ -55,15 +55,28 @@ workflow DemandEvalWorkflow {
       }
     }
 
-    node EvaluateProduct {
-      call evaluate_product
+    node GetPurchaseIntent {
+      call get_purchase_intent
       inputs {
         Object<Persona> persona = ProcessNextPersona.current_persona
         String product_name = EvaluationLoop.product_name
         String product_description = EvaluationLoop.product_description
       }
       const {
-        model: "gemma3:12b"
+        model: "gpt-oss:20b"
+      }
+      outputs {
+        String intent_text
+      }
+    }
+
+    node CalculatePersonaMetrics {
+      call calculate_persona_metrics
+      inputs {
+        Object<Persona> persona = ProcessNextPersona.current_persona
+        String intent_text = GetPurchaseIntent.intent_text
+      }
+      const {
         embedding_model: "embeddinggemma"
       }
       outputs {
@@ -74,12 +87,12 @@ workflow DemandEvalWorkflow {
     node CollectEvaluations {
       call collect_evaluations
       inputs {
-        Object<PersonaEvaluation> evaluation = EvaluateProduct.evaluation?
+        Object<PersonaEvaluation> evaluation = CalculatePersonaMetrics.evaluation?
         List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas?
         Bool no_personas_left = ProcessNextPersona.no_personas_left?
       }
       when {
-        ProcessNextPersona.no_personas_left or EvaluateProduct.evaluation
+        ProcessNextPersona.no_personas_left or CalculatePersonaMetrics.evaluation
       }
       outputs {
         Bool is_done

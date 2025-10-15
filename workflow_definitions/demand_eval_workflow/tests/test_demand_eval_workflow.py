@@ -11,7 +11,8 @@ from workflow_definitions.demand_eval_workflow.demand_eval_workflow import (
     DemandMetrics,
     generate_personas,
     process_next_persona,
-    evaluate_product,
+    get_purchase_intent,
+    calculate_persona_metrics,
     collect_evaluations,
     analyze_demand,
     save_report,
@@ -40,9 +41,6 @@ def sample_evaluation(sample_persona):
         persona=sample_persona,
         purchase_intent=4.5,
         intent_text="I would very likely purchase this product as it aligns with my values",
-        reasoning="The product aligns with my values for innovation and quality",
-        price_sensitivity="Low",
-        likelihood_to_recommend=4.7,
         similarity_score=0.85,
         pmfs=[0.05, 0.10, 0.15, 0.35, 0.35],
     )
@@ -57,7 +55,6 @@ def sample_metrics():
         high_intent_percentage=60.0,
         medium_intent_percentage=30.0,
         low_intent_percentage=10.0,
-        mean_recommendation=4.1,
         demographic_insights={
             "age_18-35": 4.2,
             "age_36-55": 3.7,
@@ -123,47 +120,54 @@ def test_process_next_persona_no_personas_left():
     assert result["remaining_personas"] == []
 
 
-def test_evaluate_product(sample_persona):
-    """Test product evaluation with mocked LLM and embeddings."""
-    # Mock LLM for intent and details responses
+def test_get_purchase_intent(sample_persona):
+    """Test getting purchase intent with mocked LLM."""
+    # Mock LLM for intent response
     mock_llm = MagicMock()
 
     intent_response = MagicMock()
     intent_response.content = "I would very likely purchase this product as it aligns perfectly with my tech-savvy lifestyle and values of innovation."
 
-    details_response = MagicMock()
-    details_response.content = """```json
-{
-    "reasoning": "This product fits my lifestyle and values perfectly",
-    "price_sensitivity": "Low",
-    "recommendation_text": "I would definitely recommend this to others like me"
-}
-```"""
+    mock_llm.invoke.return_value = intent_response
 
-    mock_llm.invoke.side_effect = [intent_response, details_response]
-
-    # Mock embeddings
-    mock_embeddings = MagicMock()
-    # Return embeddings that will match to rating 6 (high intent)
-    mock_embeddings.embed_query.return_value = [0.1] * 768  # Mock 768-dim embedding
-
-    with (
-        patch(
-            "workflow_definitions.demand_eval_workflow.demand_eval_workflow.ChatOllama",
-            return_value=mock_llm,
-        ),
-        patch(
-            "workflow_definitions.demand_eval_workflow.demand_eval_workflow.OllamaEmbeddings",
-            return_value=mock_embeddings,
-        ),
+    with patch(
+        "workflow_definitions.demand_eval_workflow.demand_eval_workflow.ChatOllama",
+        return_value=mock_llm,
     ):
-        result = evaluate_product(
+        result = get_purchase_intent(
             persona=sample_persona,
             product_name="Smart Home Hub",
             product_description="AI-powered home automation system",
             config={
                 "model": "gemma3:12b",
                 "temperature": 0.7,
+            },
+        )
+
+        assert "intent_text" in result
+        intent_text = result["intent_text"]
+        assert isinstance(intent_text, str)
+        assert len(intent_text) > 0
+        assert "purchase" in intent_text.lower() or "would" in intent_text.lower()
+
+
+def test_calculate_persona_metrics(sample_persona):
+    """Test calculating persona metrics with mocked embeddings."""
+    intent_text = "I would very likely purchase this product as it aligns perfectly with my tech-savvy lifestyle and values of innovation."
+
+    # Mock embeddings
+    mock_embeddings = MagicMock()
+    # Return embeddings that will be consistent
+    mock_embeddings.embed_query.return_value = [0.1] * 768  # Mock 768-dim embedding
+
+    with patch(
+        "workflow_definitions.demand_eval_workflow.demand_eval_workflow.OllamaEmbeddings",
+        return_value=mock_embeddings,
+    ):
+        result = calculate_persona_metrics(
+            persona=sample_persona,
+            intent_text=intent_text,
+            config={
                 "embedding_model": "nomic-embed-text",
             },
         )
@@ -172,9 +176,6 @@ def test_evaluate_product(sample_persona):
         evaluation = result["evaluation"]
         assert isinstance(evaluation, PersonaEvaluation)
         assert 1 <= evaluation.purchase_intent <= 5
-        assert 1 <= evaluation.likelihood_to_recommend <= 5
-        assert evaluation.price_sensitivity in ["Low", "Medium", "High"]
-        assert len(evaluation.reasoning) > 0
         assert len(evaluation.intent_text) > 0
         assert 0.0 <= evaluation.similarity_score <= 1.0
         assert len(evaluation.pmfs) == 5
@@ -246,7 +247,6 @@ def test_analyze_demand(sample_evaluation):
     ]
 
     intents = [2.8, 4.5, 3.6]
-    recommendations = [2.9, 4.8, 3.8]
 
     pmfs_list = [
         [0.15, 0.25, 0.30, 0.20, 0.10],
@@ -260,9 +260,6 @@ def test_analyze_demand(sample_evaluation):
                 persona=persona,
                 purchase_intent=intents[i],
                 intent_text=f"Intent text for evaluation {i}",
-                reasoning=f"Evaluation {i}",
-                price_sensitivity="Medium",
-                likelihood_to_recommend=recommendations[i],
                 similarity_score=0.75,
                 pmfs=pmfs_list[i],
             )
@@ -280,7 +277,6 @@ def test_analyze_demand(sample_evaluation):
     assert metrics.total_personas == 3
     assert metrics.mean_purchase_intent == pytest.approx(3.63, rel=0.1)
     assert metrics.std_purchase_intent > 0
-    assert metrics.mean_recommendation == pytest.approx(3.83, rel=0.1)
 
     # Check distribution percentages
     assert (
@@ -409,7 +405,6 @@ def test_save_report_demand_assessments(tmp_path):
         high_intent_percentage=80.0,
         medium_intent_percentage=15.0,
         low_intent_percentage=5.0,
-        mean_recommendation=4.6,
         demographic_insights={},
         total_personas=10,
         mean_pmfs=[0.05, 0.05, 0.10, 0.30, 0.50],
@@ -436,7 +431,6 @@ def test_save_report_demand_assessments(tmp_path):
         high_intent_percentage=40.0,
         medium_intent_percentage=50.0,
         low_intent_percentage=10.0,
-        mean_recommendation=3.4,
         demographic_insights={},
         total_personas=10,
         mean_pmfs=[0.10, 0.15, 0.35, 0.30, 0.10],
@@ -463,7 +457,6 @@ def test_save_report_demand_assessments(tmp_path):
         high_intent_percentage=10.0,
         medium_intent_percentage=30.0,
         low_intent_percentage=60.0,
-        mean_recommendation=2.2,
         demographic_insights={},
         total_personas=10,
         mean_pmfs=[0.35, 0.35, 0.20, 0.08, 0.02],
@@ -499,7 +492,7 @@ def test_full_workflow_integration():
 ```"""
     mock_llm_personas.invoke.return_value = mock_response_persona
 
-    # Mock LLM for product evaluation (intent + details)
+    # Mock LLM for product evaluation (intent only)
     mock_llm_eval = MagicMock()
 
     intent_response = MagicMock()
@@ -507,19 +500,7 @@ def test_full_workflow_integration():
         "I would probably purchase this product as it fits my needs"
     )
 
-    details_response = MagicMock()
-    details_response.content = """```json
-{
-    "reasoning": "Good product for my needs",
-    "price_sensitivity": "Medium",
-    "recommendation_text": "I would likely recommend this to others"
-}
-```"""
-
-    mock_llm_eval.invoke.side_effect = [
-        intent_response,
-        details_response,
-    ] * 2  # 2 personas
+    mock_llm_eval.invoke.return_value = intent_response
 
     # Mock embeddings
     mock_embeddings = MagicMock()
@@ -550,11 +531,20 @@ def test_full_workflow_integration():
         # Evaluate product with each persona
         evaluations = []
         for persona in personas:
-            eval_result = evaluate_product(
+            # Get intent
+            intent_result = get_purchase_intent(
                 persona=persona,
                 product_name="Smart Watch",
                 product_description="Fitness tracking smartwatch",
-                config={"model": "gemma3:12b", "embedding_model": "nomic-embed-text"},
+                config={"model": "gemma3:12b"},
+            )
+            intent_text = intent_result["intent_text"]
+
+            # Calculate metrics
+            eval_result = calculate_persona_metrics(
+                persona=persona,
+                intent_text=intent_text,
+                config={"embedding_model": "nomic-embed-text"},
             )
             evaluations.append(eval_result["evaluation"])
 
@@ -584,7 +574,7 @@ def test_full_workflow_with_report(tmp_path):
 ```"""
     mock_llm_personas.invoke.return_value = mock_response_persona
 
-    # Mock LLM for product evaluation
+    # Mock LLM for product evaluation (intent only)
     mock_llm_eval = MagicMock()
 
     intent_response = MagicMock()
@@ -592,16 +582,7 @@ def test_full_workflow_with_report(tmp_path):
         "I would probably purchase this product as it fits my needs"
     )
 
-    details_response = MagicMock()
-    details_response.content = """```json
-{
-    "reasoning": "Good product for my needs",
-    "price_sensitivity": "Medium",
-    "recommendation_text": "I would likely recommend this to others"
-}
-```"""
-
-    mock_llm_eval.invoke.side_effect = [intent_response, details_response]
+    mock_llm_eval.invoke.return_value = intent_response
 
     # Mock embeddings
     mock_embeddings = MagicMock()
@@ -627,11 +608,20 @@ def test_full_workflow_with_report(tmp_path):
         mock_chat.return_value = mock_llm_eval
         evaluations = []
         for persona in personas:
-            eval_result = evaluate_product(
+            # Get intent
+            intent_result = get_purchase_intent(
                 persona=persona,
                 product_name="Smart Watch",
                 product_description="Fitness tracking smartwatch",
-                config={"model": "gemma3:12b", "embedding_model": "nomic-embed-text"},
+                config={"model": "gemma3:12b"},
+            )
+            intent_text = intent_result["intent_text"]
+
+            # Calculate metrics
+            eval_result = calculate_persona_metrics(
+                persona=persona,
+                intent_text=intent_text,
+                config={"embedding_model": "nomic-embed-text"},
             )
             evaluations.append(eval_result["evaluation"])
 

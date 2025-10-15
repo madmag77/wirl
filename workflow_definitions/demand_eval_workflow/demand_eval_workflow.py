@@ -14,7 +14,6 @@ Key methodology:
 
 import json
 import random
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -22,6 +21,14 @@ import numpy as np
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+from workflow_definitions.demand_eval_workflow.prompts import (
+    get_persona_generation_prompt,
+    get_purchase_intent_prompt,
+)
+from workflow_definitions.demand_eval_workflow.report_template import (
+    generate_report_content,
+)
 
 
 class Persona(BaseModel):
@@ -47,11 +54,6 @@ class PersonaEvaluation(BaseModel):
         description="Purchase intent rating (1-5 Likert scale, computed as expected value)"
     )
     intent_text: str = Field(description="Textual description of purchase intent")
-    reasoning: str = Field(description="Explanation for the rating")
-    price_sensitivity: str = Field(description="Price sensitivity (Low, Medium, High)")
-    likelihood_to_recommend: float = Field(
-        description="Likelihood to recommend (1-5, expected value)"
-    )
     similarity_score: float = Field(
         description="Maximum cosine similarity to golden intents", default=0.0
     )
@@ -70,7 +72,6 @@ class DemandMetrics(BaseModel):
     high_intent_percentage: float = Field(description="Percentage with intent >= 4")
     medium_intent_percentage: float = Field(description="Percentage with intent 2.5-4")
     low_intent_percentage: float = Field(description="Percentage with intent < 2.5")
-    mean_recommendation: float = Field(description="Average likelihood to recommend")
     demographic_insights: Dict[str, float] = Field(
         description="Purchase intent by demographic"
     )
@@ -157,22 +158,13 @@ def generate_personas(num_personas: int, config: dict) -> dict:
         location = random.choice(locations)
 
         # Use LLM to generate occupation, lifestyle, and values
-        prompt = f"""Generate a realistic persona profile for market research.
-
-Demographics:
-- Age: {age}
-- Gender: {gender}
-- Income Level: {income}
-- Education: {education}
-- Location: {location}
-
-Please provide:
-1. A specific occupation that fits these demographics
-2. A brief lifestyle description (2-3 sentences)
-3. 3-5 core values or preferences
-
-Format as JSON with keys: occupation, lifestyle, values (as a list)
-"""
+        prompt = get_persona_generation_prompt(
+            age=age,
+            gender=gender,
+            income=income,
+            education=education,
+            location=location,
+        )
 
         response = llm.invoke(prompt)
         content = getattr(response, "content", str(response))
@@ -251,31 +243,27 @@ def process_next_persona(
     }
 
 
-def evaluate_product(
+def get_purchase_intent(
     persona: Persona, product_name: str, product_description: str, config: dict
 ) -> dict:
     """
-    Have a persona evaluate a product using semantic similarity to golden intents.
+    Get textual purchase intent from a persona.
 
-    This implements the core methodology from the research paper:
-    1. Ask LLM for TEXTUAL purchase intent (not a number)
-    2. Vectorize the response using embeddings (Nomic via Ollama)
-    3. Compare to golden intent descriptions via cosine similarity
-    4. Map to Likert scale based on best match
+    This implements step 1 of the research paper methodology:
+    Ask LLM for TEXTUAL purchase intent (not a number) to avoid rating bias.
 
     Args:
         persona: The persona evaluating the product
         product_name: Name of the product
         product_description: Detailed product description
-        config: Runner config with model, temperature, and embedding_model
+        config: Runner config with model and temperature
 
     Returns:
-        dict with evaluation containing ratings and reasoning
+        dict with intent_text (textual description of purchase intent)
     """
     model = config.get("model", "gemma3:12b")
     temperature = config.get("temperature", 0.7)
     model_type = config.get("model_type", "ollama")
-    embedding_model = config.get("embedding_model", "nomic-embed-text")
 
     # Initialize LLM for text generation
     if model_type == "openai":
@@ -287,73 +275,46 @@ def evaluate_product(
             validate_model_on_init=True,
         )
 
-    # Initialize embeddings model (Nomic via Ollama)
-    embeddings = OllamaEmbeddings(model=embedding_model)
-
-    # Step 1: Ask for TEXTUAL purchase intent (not numeric rating)
-    intent_prompt = f"""You are roleplaying as a market research participant with the following profile:
-
-Age: {persona.age}
-Gender: {persona.gender}
-Income Level: {persona.income_level}
-Education: {persona.education}
-Occupation: {persona.occupation}
-Location: {persona.location}
-Lifestyle: {persona.lifestyle}
-Core Values: {', '.join(persona.values)}
-
-You are being asked to evaluate the following product:
-
-Product: {product_name}
-Description: {product_description}
-
-Question: How likely would you be to purchase this product?
-
-Please provide a detailed textual description of your purchase intent. Explain whether you would purchase this product and why, considering your demographic profile, lifestyle, and values. Do NOT provide a numeric rating - just describe your intent in words.
-
-Be specific about your level of interest (e.g., "definitely would", "probably would", "might", "probably not", "definitely not").
-"""
+    # Ask for TEXTUAL purchase intent (not numeric rating)
+    intent_prompt = get_purchase_intent_prompt(
+        persona=persona,
+        product_name=product_name,
+        product_description=product_description,
+    )
 
     intent_response = llm.invoke(intent_prompt)
     intent_text = getattr(intent_response, "content", str(intent_response))
 
-    # Step 2: Get additional information (reasoning, price sensitivity, recommendation)
-    details_prompt = f"""Based on your purchase intent: "{intent_text}"
+    return {"intent_text": intent_text}
 
-Please provide:
-1. A brief summary of your reasoning (why you feel this way about the product)
-2. Your price sensitivity for this type of product (Low, Medium, or High)
-3. A textual description of how likely you'd be to recommend this product to others with a similar profile
 
-Format as JSON with keys: reasoning (string), price_sensitivity (string), recommendation_text (string)
-"""
+def calculate_persona_metrics(persona: Persona, intent_text: str, config: dict) -> dict:
+    """
+    Calculate purchase intent metrics using semantic similarity to golden intents.
 
-    details_response = llm.invoke(details_prompt)
-    details_content = getattr(details_response, "content", str(details_response))
+    This implements steps 2-4 of the research paper methodology:
+    - Vectorize the intent text using embeddings
+    - Compare to golden intent descriptions via cosine similarity
+    - Compute probability-weighted rating (PMF approach)
 
-    # Parse details
-    try:
-        if "```json" in details_content:
-            details_content = (
-                details_content.split("```json")[1].split("```")[0].strip()
-            )
-        elif "```" in details_content:
-            details_content = details_content.split("```")[1].split("```")[0].strip()
+    Args:
+        persona: The persona who provided the intent
+        intent_text: Textual description of purchase intent
+        config: Runner config with embedding_model
 
-        details_data = json.loads(details_content)
-        reasoning = details_data.get("reasoning", intent_text[:200])
-        price_sensitivity = details_data.get("price_sensitivity", "Medium")
-        recommendation_text = details_data.get("recommendation_text", intent_text)
-    except (json.JSONDecodeError, KeyError):
-        reasoning = intent_text[:200] if len(intent_text) > 200 else intent_text
-        price_sensitivity = "Medium"
-        recommendation_text = intent_text
+    Returns:
+        dict with evaluation containing purchase intent and probability distribution
+    """
+    embedding_model = config.get("embedding_model", "nomic-embed-text")
 
-    # Step 3: Vectorize the intent text
+    # Initialize embeddings model (Nomic via Ollama)
+    embeddings = OllamaEmbeddings(model=embedding_model)
+
+    # Vectorize the intent text and calculate similarities
     try:
         intent_embedding = np.array(embeddings.embed_query(intent_text[:5000]))
 
-        # Step 4: Calculate similarities to all golden intents and compute expected rating
+        # Calculate similarities to all golden intents and compute expected rating
         # Following the paper's methodology:
         # 1. Get cosine similarities to all anchors
         # 2. Subtract minimum to shift range
@@ -384,31 +345,9 @@ Format as JSON with keys: reasoning (string), price_sensitivity (string), recomm
         purchase_intent = sum(r * p for r, p in zip(ratings, probabilities))
         best_similarity = max(similarities)  # For logging/debugging
 
-        # Also process recommendation text using the same method
-        recommendation_embedding = np.array(embeddings.embed_query(recommendation_text))
-        rec_similarities = []
-
-        for rating, golden_text in sorted(GOLDEN_INTENTS.items()):
-            golden_embedding = np.array(embeddings.embed_query(golden_text))
-            similarity = cosine_similarity(recommendation_embedding, golden_embedding)
-            rec_similarities.append(similarity)
-
-        # Apply same transformation for recommendation
-        min_rec_sim = min(rec_similarities)
-        shifted_rec_sims = [s - min_rec_sim for s in rec_similarities]
-
-        total_rec = sum(shifted_rec_sims)
-        if total_rec > 0:
-            rec_probabilities = [s / total_rec for s in shifted_rec_sims]
-        else:
-            rec_probabilities = [1.0 / len(rec_similarities)] * len(rec_similarities)
-
-        likelihood_to_recommend = sum(r * p for r, p in zip(ratings, rec_probabilities))
-
     except Exception:
         # Fallback if embeddings fail
         purchase_intent = 3.0  # Neutral on 5-point scale
-        likelihood_to_recommend = 3.0
         best_similarity = 0.0
         probabilities = [1.0 / 5] * 5
 
@@ -417,9 +356,6 @@ Format as JSON with keys: reasoning (string), price_sensitivity (string), recomm
         persona=persona,
         purchase_intent=purchase_intent,
         intent_text=intent_text,
-        reasoning=reasoning,
-        price_sensitivity=price_sensitivity,
-        likelihood_to_recommend=likelihood_to_recommend,
         similarity_score=best_similarity,
     )
 
@@ -485,7 +421,6 @@ def analyze_demand(
                 high_intent_percentage=0.0,
                 medium_intent_percentage=0.0,
                 low_intent_percentage=0.0,
-                mean_recommendation=0.0,
                 demographic_insights={},
                 total_personas=0,
             )
@@ -493,7 +428,6 @@ def analyze_demand(
 
     # Extract purchase intents and recommendations
     intents = [e.purchase_intent for e in evaluations]
-    recommendations = [e.likelihood_to_recommend for e in evaluations]
 
     # Calculate mean PMF across all personas
     # mean_pmfs[i] = average probability for rating i+1 across all personas
@@ -507,7 +441,6 @@ def analyze_demand(
     mean_intent = sum(intents) / len(intents)
     variance = sum((x - mean_intent) ** 2 for x in intents) / len(intents)
     std_intent = variance**0.5
-    mean_rec = sum(recommendations) / len(recommendations)
 
     # Calculate intent distribution (for 5-point scale)
     high_intent = sum(1 for i in intents if i >= 4)
@@ -567,7 +500,6 @@ def analyze_demand(
         high_intent_percentage=high_pct,
         medium_intent_percentage=medium_pct,
         low_intent_percentage=low_pct,
-        mean_recommendation=mean_rec,
         demographic_insights=demographic_insights,
         total_personas=total,
     )
@@ -600,6 +532,8 @@ def save_report(
     Returns:
         dict with final_metrics (pass-through of input metrics)
     """
+    from datetime import datetime
+
     # Create timestamp for filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -618,226 +552,13 @@ def save_report(
     # Full path to report file
     report_file = report_dir / filename
 
-    # Generate markdown report
-    report_content = f"""# Demand Evaluation Report: {product_name}
-
-**Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-## Product Information
-
-**Product Name:** {product_name}
-
-**Description:** {product_description}
-
-**Number of Personas Evaluated:** {num_personas}
-
----
-
-## Executive Summary
-
-### Overall Purchase Intent
-
-- **Mean Purchase Intent:** {metrics.mean_purchase_intent:.2f} / 5.0
-- **Standard Deviation:** {metrics.std_purchase_intent:.2f}
-- **Mean Recommendation Score:** {metrics.mean_recommendation:.2f} / 5.0
-
-### Intent Distribution
-
-| Category | Percentage |
-|----------|-----------|
-| **High Intent** (≥ 4.0) | {metrics.high_intent_percentage:.1f}% |
-| **Medium Intent** (2.5 - 4.0) | {metrics.medium_intent_percentage:.1f}% |
-| **Low Intent** (< 2.5) | {metrics.low_intent_percentage:.1f}% |
-
-### Probability Distribution (Mean PMF)
-
-The following table shows the average probability distribution across all personas for each rating level. This represents how likely personas are to have each specific purchase intent level based on semantic similarity to golden anchors:
-
-"""
-
-    # Add PMF table if available
-    if metrics.mean_pmfs and len(metrics.mean_pmfs) == 5:
-        report_content += "| Rating | Description | Mean Probability |\n"
-        report_content += "|--------|-------------|------------------|\n"
-        rating_labels = [
-            "1 - Definitely NOT",
-            "2 - Probably NOT",
-            "3 - Neutral/Might",
-            "4 - Probably Would",
-            "5 - Definitely Would",
-        ]
-        for i, (label, prob) in enumerate(zip(rating_labels, metrics.mean_pmfs)):
-            report_content += f"| {label} | {GOLDEN_INTENTS[i+1][:50]}... | {prob:.3f} ({prob*100:.1f}%) |\n"
-
-        report_content += "\n*Note: These probabilities are averaged across all persona evaluations and represent the distribution of semantic similarity to each anchor rating.*\n"
-
-    report_content += """
----
-
-## Demand Assessment
-
-"""
-
-    # Add demand interpretation
-    mean_intent = metrics.mean_purchase_intent
-    if mean_intent >= 4.0:
-        assessment = "**Strong Demand** 🟢"
-        interpretation = (
-            "The product shows strong market demand with high purchase intent. "
-            "This indicates good product-market fit and suggests proceeding with development/launch."
-        )
-    elif mean_intent >= 3.0:
-        assessment = "**Moderate Demand** 🟡"
-        interpretation = (
-            "The product shows moderate market demand. Consider refining the value "
-            "proposition or targeting specific high-intent demographic segments identified below."
-        )
-    else:
-        assessment = "**Low Demand** 🔴"
-        interpretation = (
-            "The product shows limited market demand. Significant changes to the product "
-            "concept, positioning, or target market may be needed."
-        )
-
-    report_content += f"""{assessment}
-
-{interpretation}
-
-**High Intent Personas:** {metrics.high_intent_percentage:.1f}% of evaluated personas are likely to purchase (rating ≥ 4.0).
-
----
-
-## Demographic Insights
-
-The following segments show varying levels of purchase intent:
-
-"""
-
-    # Add demographic insights table
-    if metrics.demographic_insights:
-        report_content += "| Demographic Segment | Mean Purchase Intent |\n"
-        report_content += "|---------------------|---------------------|\n"
-
-        # Sort by intent (highest first)
-        sorted_insights = sorted(
-            metrics.demographic_insights.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-
-        for segment, intent in sorted_insights:
-            # Format segment name nicely
-            formatted_segment = segment.replace("_", " ").title()
-            report_content += f"| {formatted_segment} | {intent:.2f} |\n"
-
-        report_content += "\n### Key Findings\n\n"
-
-        # Identify highest and lowest intent segments
-        if len(sorted_insights) >= 2:
-            highest_segment, highest_intent = sorted_insights[0]
-            lowest_segment, lowest_intent = sorted_insights[-1]
-
-            report_content += f"- **Highest Intent Segment:** {highest_segment.replace('_', ' ').title()} ({highest_intent:.2f})\n"
-            report_content += f"- **Lowest Intent Segment:** {lowest_segment.replace('_', ' ').title()} ({lowest_intent:.2f})\n\n"
-
-        # Provide targeting recommendations
-        high_segments = [seg for seg, intent in sorted_insights if intent >= 4.0]
-        if high_segments:
-            report_content += "**Recommended Target Segments:** "
-            report_content += ", ".join(
-                seg.replace("_", " ").title() for seg in high_segments
-            )
-            report_content += "\n\n"
-    else:
-        report_content += "*No demographic insights available.*\n\n"
-
-    # Add methodology section
-    report_content += """---
-
-## Methodology
-
-This evaluation uses LLM-simulated personas with diverse demographic attributes:
-- **Age ranges:** 18-70 years
-- **Income levels:** Low, Medium, High
-- **Education levels:** High School through PhD
-- **Locations:** Urban, Suburban, Rural
-
-### Semantic Similarity Rating Approach
-
-Purchase intent ratings are calculated using a probability-weighted semantic similarity method based on the research paper methodology:
-
-1. Each persona provides textual purchase intent (not numeric)
-2. Text is vectorized using Nomic embeddings
-3. Cosine similarities are calculated against 5 golden intent anchors
-4. Similarities are transformed into a probability mass function (PMF):
-   - Subtract minimum similarity to shift range
-   - Normalize to create a probability distribution over the 5 rating levels
-5. Final rating is computed as the expected value (weighted sum of ratings × probabilities)
-
-**Mean PMF Calculation:** The mean PMF shown in the report is calculated by averaging the individual PMFs from each persona. This provides insight into the overall distribution of purchase intent across the population, showing which rating levels are most probable on average.
-
-This approach reduces bias and produces more human-like rating distributions, as described in the paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings".
-
-### Rating Scale (5-point continuous)
-
-- **1.0** - Definitely would NOT purchase
-- **2.0** - Probably would NOT purchase
-- **3.0** - Neutral / might or might not purchase
-- **4.0** - Probably would purchase
-- **5.0** - Definitely would purchase
-
-Ratings are continuous values (e.g., 3.6) providing nuanced insights.
-
----
-
-## Recommendations
-
-"""
-
-    # Add recommendations based on metrics
-    high_pct = metrics.high_intent_percentage
-    mean = metrics.mean_purchase_intent
-
-    if high_pct >= 60 and mean >= 4.0:
-        report_content += """### Strong Go-to-Market Opportunity ✅
-
-1. **Launch Strategy:** Proceed with product development and go-to-market planning
-2. **Target Marketing:** Focus on high-intent demographic segments identified above
-3. **Early Adopters:** The identified high-intent segments are strong candidates for beta testing
-4. **Value Proposition:** Current positioning resonates well with target market
-"""
-    elif high_pct >= 40 and mean >= 3.0:
-        report_content += """### Optimize Before Launch 🔧
-
-1. **Refine Positioning:** Strengthen value proposition to increase intent
-2. **Segment Focus:** Concentrate marketing efforts on high-intent demographics
-3. **Product Iteration:** Consider feedback from medium-intent personas to improve appeal
-4. **Pricing Strategy:** Evaluate price sensitivity across segments
-"""
-    else:
-        report_content += """### Significant Changes Needed ⚠️
-
-1. **Product Redesign:** Current concept shows limited market appeal
-2. **Market Research:** Conduct deeper investigation into customer needs
-3. **Alternative Positioning:** Consider different target markets or use cases
-4. **Feature Validation:** Re-evaluate core features and value proposition
-"""
-
-    report_content += """
----
-
-## Next Steps
-
-1. **Validate Results:** Consider pilot testing with real users from high-intent segments
-2. **Deep Dive Analysis:** Review individual persona evaluations for qualitative insights
-3. **Competitive Analysis:** Compare against alternative products in the market
-4. **Pricing Strategy:** Use price sensitivity data to optimize pricing
-5. **Marketing Messages:** Extract common themes from high-intent persona reasoning
-
----
-
-*This report was generated using the WIRL Demand Evaluation Workflow, which implements methodology from the research paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings"*
-"""
+    # Generate markdown report using template
+    report_content = generate_report_content(
+        product_name=product_name,
+        product_description=product_description,
+        num_personas=num_personas,
+        metrics=metrics,
+    )
 
     # Write report to file
     report_file.write_text(report_content, encoding="utf-8")
