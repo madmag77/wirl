@@ -23,9 +23,11 @@ Instead of asking LLMs for numeric ratings directly (which can be biased), the w
 4. **Computes expected rating**: Uses a probability-based approach:
    - Calculates similarities to all 5 golden intents
    - Subtracts minimum similarity to shift the range
-   - Normalizes to create a probability distribution
+   - Normalizes to create a probability distribution (PMF - Probability Mass Function)
    - Computes expected rating as weighted sum: rating = Σ(rating_i × probability_i)
    - Returns a continuous value (e.g., 3.6) rather than discrete integers
+   - Individual PMFs are stored for each persona evaluation
+   - Mean PMF is calculated across all personas to show overall distribution
 
 ### Why This Approach Works
 
@@ -69,7 +71,9 @@ This probability-weighted approach provides more nuanced ratings than simple "be
   - Mean likelihood to recommend
   - Demographic insights (purchase intent by age, income, location)
   - Total number of personas evaluated
-- `evaluations` (List<PersonaEvaluation>): Individual evaluations from each persona
+  - **Mean PMF** (Probability Mass Function): Average probability distribution across all personas for each rating level (1-5)
+- `evaluations` (List<PersonaEvaluation>): Individual evaluations from each persona, including:
+  - Individual PMF (probability distribution for each rating level)
 
 **Note:** A comprehensive Markdown report is automatically generated and saved to `report_path` with a timestamped filename.
 
@@ -226,12 +230,13 @@ Reports include timestamp to track multiple evaluations over time.
 
 1. **Product Information**: Name, description, number of personas evaluated
 2. **Executive Summary**: Key metrics with visual indicators
-3. **Demand Assessment**: Automatic categorization (Strong 🟢, Moderate 🟡, Low 🔴)
-4. **Demographic Insights**: Sorted table showing purchase intent by segment
-5. **Key Findings**: Highest/lowest intent segments and recommended targets
-6. **Methodology**: Explanation of semantic similarity approach
-7. **Recommendations**: Actionable next steps based on demand level
-8. **Next Steps**: Concrete actions for validation and iteration
+3. **Probability Distribution (Mean PMF)**: Table showing average probability for each rating level across all personas
+4. **Demand Assessment**: Automatic categorization (Strong 🟢, Moderate 🟡, Low 🔴)
+5. **Demographic Insights**: Sorted table showing purchase intent by segment
+6. **Key Findings**: Highest/lowest intent segments and recommended targets
+7. **Methodology**: Explanation of semantic similarity approach
+8. **Recommendations**: Actionable next steps based on demand level
+9. **Next Steps**: Concrete actions for validation and iteration
 
 **Example Report Excerpt:**
 
@@ -253,6 +258,18 @@ Reports include timestamp to track multiple evaluations over time.
 | **High Intent** (≥ 4.0) | 65.0% |
 | **Medium Intent** (2.5 - 4.0) | 25.0% |
 | **Low Intent** (< 2.5) | 10.0% |
+
+### Probability Distribution (Mean PMF)
+
+| Rating | Description | Mean Probability |
+|--------|-------------|------------------|
+| 1 - Definitely NOT | I would definitely not purchase this product... | 0.050 (5.0%) |
+| 2 - Probably NOT | I would probably not purchase this product... | 0.080 (8.0%) |
+| 3 - Neutral/Might | I might or might not purchase this product... | 0.150 (15.0%) |
+| 4 - Probably Would | I would probably purchase this product... | 0.350 (35.0%) |
+| 5 - Definitely Would | I would definitely purchase this product... | 0.370 (37.0%) |
+
+*Note: These probabilities represent the average distribution of semantic similarity across all personas.*
 
 ## Demand Assessment
 
@@ -292,7 +309,8 @@ The product shows strong market demand with high purchase intent...
       "location_Suburban": 3.7,
       "location_Rural": 3.5
     },
-    "total_personas": 30
+    "total_personas": 30,
+    "mean_pmfs": [0.10, 0.15, 0.20, 0.30, 0.25]
   }
 }
 ```
@@ -311,7 +329,8 @@ The product shows strong market demand with high purchase intent...
   "similarity_score": 0.87,
   "reasoning": "Aligns with my values for innovation and health tracking",
   "price_sensitivity": "Low",
-  "likelihood_to_recommend": 4.6
+  "likelihood_to_recommend": 4.6,
+  "pmfs": [0.05, 0.10, 0.15, 0.35, 0.35]
 }
 ```
 
@@ -319,6 +338,8 @@ The product shows strong market demand with high purchase intent...
 - Ratings are continuous values (e.g., 4.3) computed as probability-weighted expected values, not integers
 - The `similarity_score` (0.87) represents the maximum similarity to any golden intent anchor
 - Higher similarity scores indicate clearer, more confident intent expressions
+- The `pmfs` array shows the probability distribution over all 5 rating levels (sums to 1.0)
+- Mean PMF is calculated by averaging individual PMFs across all personas, showing the overall population distribution
 
 ## Interpretation
 

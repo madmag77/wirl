@@ -55,6 +55,9 @@ class PersonaEvaluation(BaseModel):
     similarity_score: float = Field(
         description="Maximum cosine similarity to golden intents", default=0.0
     )
+    pmfs: List[float] = Field(
+        description="Probability mass function of purchase intent"
+    )
 
 
 class DemandMetrics(BaseModel):
@@ -72,6 +75,9 @@ class DemandMetrics(BaseModel):
         description="Purchase intent by demographic"
     )
     total_personas: int = Field(description="Total number of personas evaluated")
+    mean_pmfs: List[float] = Field(
+        description="Mean probability mass function of purchase intent"
+    )
 
 
 # Golden intent descriptions for 5-point Likert scale mapping
@@ -345,7 +351,7 @@ Format as JSON with keys: reasoning (string), price_sensitivity (string), recomm
 
     # Step 3: Vectorize the intent text
     try:
-        intent_embedding = np.array(embeddings.embed_query(intent_text))
+        intent_embedding = np.array(embeddings.embed_query(intent_text[:5000]))
 
         # Step 4: Calculate similarities to all golden intents and compute expected rating
         # Following the paper's methodology:
@@ -404,8 +410,10 @@ Format as JSON with keys: reasoning (string), price_sensitivity (string), recomm
         purchase_intent = 3.0  # Neutral on 5-point scale
         likelihood_to_recommend = 3.0
         best_similarity = 0.0
+        probabilities = [1.0 / 5] * 5
 
     evaluation = PersonaEvaluation(
+        pmfs=probabilities,
         persona=persona,
         purchase_intent=purchase_intent,
         intent_text=intent_text,
@@ -471,6 +479,7 @@ def analyze_demand(
     if not evaluations or len(evaluations) == 0:
         return {
             "metrics": DemandMetrics(
+                mean_pmfs=[],
                 mean_purchase_intent=0.0,
                 std_purchase_intent=0.0,
                 high_intent_percentage=0.0,
@@ -485,6 +494,14 @@ def analyze_demand(
     # Extract purchase intents and recommendations
     intents = [e.purchase_intent for e in evaluations]
     recommendations = [e.likelihood_to_recommend for e in evaluations]
+
+    # Calculate mean PMF across all personas
+    # mean_pmfs[i] = average probability for rating i+1 across all personas
+    pmfs = [e.pmfs for e in evaluations]
+    mean_pmfs = []
+    num_ratings = len(pmfs[0]) if pmfs else 0
+    for i in range(num_ratings):
+        mean_pmfs.append(sum(pmf[i] for pmf in pmfs) / len(pmfs))
 
     # Calculate basic statistics
     mean_intent = sum(intents) / len(intents)
@@ -544,6 +561,7 @@ def analyze_demand(
             )
 
     metrics = DemandMetrics(
+        mean_pmfs=mean_pmfs,
         mean_purchase_intent=mean_intent,
         std_purchase_intent=std_intent,
         high_intent_percentage=high_pct,
@@ -631,6 +649,29 @@ def save_report(
 | **Medium Intent** (2.5 - 4.0) | {metrics.medium_intent_percentage:.1f}% |
 | **Low Intent** (< 2.5) | {metrics.low_intent_percentage:.1f}% |
 
+### Probability Distribution (Mean PMF)
+
+The following table shows the average probability distribution across all personas for each rating level. This represents how likely personas are to have each specific purchase intent level based on semantic similarity to golden anchors:
+
+"""
+
+    # Add PMF table if available
+    if metrics.mean_pmfs and len(metrics.mean_pmfs) == 5:
+        report_content += "| Rating | Description | Mean Probability |\n"
+        report_content += "|--------|-------------|------------------|\n"
+        rating_labels = [
+            "1 - Definitely NOT",
+            "2 - Probably NOT",
+            "3 - Neutral/Might",
+            "4 - Probably Would",
+            "5 - Definitely Would",
+        ]
+        for i, (label, prob) in enumerate(zip(rating_labels, metrics.mean_pmfs)):
+            report_content += f"| {label} | {GOLDEN_INTENTS[i+1][:50]}... | {prob:.3f} ({prob*100:.1f}%) |\n"
+
+        report_content += "\n*Note: These probabilities are averaged across all persona evaluations and represent the distribution of semantic similarity to each anchor rating.*\n"
+
+    report_content += """
 ---
 
 ## Demand Assessment
@@ -723,14 +764,19 @@ This evaluation uses LLM-simulated personas with diverse demographic attributes:
 
 ### Semantic Similarity Rating Approach
 
-Purchase intent ratings are calculated using a probability-weighted semantic similarity method:
+Purchase intent ratings are calculated using a probability-weighted semantic similarity method based on the research paper methodology:
 
 1. Each persona provides textual purchase intent (not numeric)
 2. Text is vectorized using Nomic embeddings
 3. Cosine similarities are calculated against 5 golden intent anchors
-4. Ratings are computed as expected values using probability distribution
+4. Similarities are transformed into a probability mass function (PMF):
+   - Subtract minimum similarity to shift range
+   - Normalize to create a probability distribution over the 5 rating levels
+5. Final rating is computed as the expected value (weighted sum of ratings × probabilities)
 
-This approach reduces bias and produces more human-like rating distributions.
+**Mean PMF Calculation:** The mean PMF shown in the report is calculated by averaging the individual PMFs from each persona. This provides insight into the overall distribution of purchase intent across the population, showing which rating levels are most probable on average.
+
+This approach reduces bias and produces more human-like rating distributions, as described in the paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings".
 
 ### Rating Scale (5-point continuous)
 

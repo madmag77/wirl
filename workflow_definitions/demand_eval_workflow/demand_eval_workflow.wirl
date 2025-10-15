@@ -64,7 +64,7 @@ workflow DemandEvalWorkflow {
       }
       const {
         model: "gemma3:12b"
-        embedding_model: "nomic-embed-text"
+        embedding_model: "embeddinggemma"
       }
       outputs {
         Object<PersonaEvaluation> evaluation

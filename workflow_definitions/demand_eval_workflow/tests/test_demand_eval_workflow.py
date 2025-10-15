@@ -44,6 +44,7 @@ def sample_evaluation(sample_persona):
         price_sensitivity="Low",
         likelihood_to_recommend=4.7,
         similarity_score=0.85,
+        pmfs=[0.05, 0.10, 0.15, 0.35, 0.35],
     )
 
 
@@ -64,6 +65,7 @@ def sample_metrics():
             "location_Urban": 4.0,
         },
         total_personas=20,
+        mean_pmfs=[0.10, 0.15, 0.20, 0.30, 0.25],
     )
 
 
@@ -175,6 +177,8 @@ def test_evaluate_product(sample_persona):
         assert len(evaluation.reasoning) > 0
         assert len(evaluation.intent_text) > 0
         assert 0.0 <= evaluation.similarity_score <= 1.0
+        assert len(evaluation.pmfs) == 5
+        assert pytest.approx(sum(evaluation.pmfs), abs=0.01) == 1.0
 
 
 def test_collect_evaluations_with_evaluation(sample_evaluation, sample_persona):
@@ -244,6 +248,12 @@ def test_analyze_demand(sample_evaluation):
     intents = [2.8, 4.5, 3.6]
     recommendations = [2.9, 4.8, 3.8]
 
+    pmfs_list = [
+        [0.15, 0.25, 0.30, 0.20, 0.10],
+        [0.05, 0.10, 0.15, 0.30, 0.40],
+        [0.10, 0.15, 0.25, 0.35, 0.15],
+    ]
+
     for i, persona in enumerate(personas):
         evaluations.append(
             PersonaEvaluation(
@@ -254,6 +264,7 @@ def test_analyze_demand(sample_evaluation):
                 price_sensitivity="Medium",
                 likelihood_to_recommend=recommendations[i],
                 similarity_score=0.75,
+                pmfs=pmfs_list[i],
             )
         )
 
@@ -291,6 +302,10 @@ def test_analyze_demand(sample_evaluation):
         or "income_Medium" in metrics.demographic_insights
         or "income_High" in metrics.demographic_insights
     )
+
+    # Check mean PMFs
+    assert len(metrics.mean_pmfs) == 5
+    assert pytest.approx(sum(metrics.mean_pmfs), abs=0.01) == 1.0
 
 
 def test_analyze_demand_empty_evaluations():
@@ -397,6 +412,7 @@ def test_save_report_demand_assessments(tmp_path):
         mean_recommendation=4.6,
         demographic_insights={},
         total_personas=10,
+        mean_pmfs=[0.05, 0.05, 0.10, 0.30, 0.50],
     )
 
     save_report(
@@ -423,6 +439,7 @@ def test_save_report_demand_assessments(tmp_path):
         mean_recommendation=3.4,
         demographic_insights={},
         total_personas=10,
+        mean_pmfs=[0.10, 0.15, 0.35, 0.30, 0.10],
     )
 
     save_report(
@@ -449,6 +466,7 @@ def test_save_report_demand_assessments(tmp_path):
         mean_recommendation=2.2,
         demographic_insights={},
         total_personas=10,
+        mean_pmfs=[0.35, 0.35, 0.20, 0.08, 0.02],
     )
 
     save_report(
