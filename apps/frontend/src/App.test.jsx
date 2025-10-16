@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 jest.mock('./constants', () => ({
   API_BASE_URL: '',
@@ -46,8 +46,11 @@ test('workflows display in succeeded, running and waiting states', async () => {
   }
 
   fetch.mockImplementation(url => {
-    if (url === '/workflows') {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?')) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -61,7 +64,7 @@ test('workflows display in succeeded, running and waiting states', async () => {
 
   render(<App />)
 
-  await screen.findByRole('table')
+  await screen.findAllByRole('table')
 
   await waitFor(() => {
     expect(document.querySelector('.status-pill.status-running')).toBeTruthy()
@@ -75,8 +78,11 @@ test('user can start new workflow with selected template', async () => {
   const details = {}
 
   fetch.mockImplementation((url, options) => {
-    if (url === '/workflows' && !options) {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?') && !options) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([
@@ -87,7 +93,7 @@ test('user can start new workflow with selected template', async () => {
     if (url === '/workflows' && options?.method === 'POST') {
       const body = JSON.parse(options.body)
       expect(body.template_name).toBe('example')
-      expect(body.query).toBe('my query')
+      expect(body.inputs.query).toBe('my query')
       workflows = [
         { id: '10', template: 'example', status: 'running', created_at: '2024-02-10T10:00:00Z' }
       ]
@@ -119,8 +125,11 @@ test('user can start new workflow with selected template', async () => {
 
 test('canceling new workflow does not start it', async () => {
   fetch.mockImplementation((url, options) => {
-    if (url === '/workflows' && !options) {
+    if (url === '/workflow-triggers') {
       return mockResponse([])
+    }
+    if (url.startsWith('/workflows?') && !options) {
+      return mockResponse({ items: [], total: 0, limit: 0, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([{ id: 'deepresearch', name: 'DeepResearch' }])
@@ -156,8 +165,11 @@ test('user can continue waiting workflow', async () => {
   }
 
   fetch.mockImplementation((url, options) => {
-    if (url === '/workflows' && !options) {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?') && !options) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -181,7 +193,8 @@ test('user can continue waiting workflow', async () => {
 
   await screen.findByPlaceholderText('Enter your answer...')
   fireEvent.change(screen.getByPlaceholderText('Enter your answer...'), { target: { value: 'ok' } })
-  fireEvent.click(screen.getByText('Continue'))
+  const modal = screen.getByRole('dialog')
+  fireEvent.click(within(modal).getByRole('button', { name: 'Continue' }))
 
   await waitFor(() => expect(fetch).toHaveBeenCalledWith('/workflows/5/continue', expect.objectContaining({ method: 'POST' })))
 
@@ -204,8 +217,11 @@ test('canceling waiting workflow does not send continue request', async () => {
   }
 
   fetch.mockImplementation((url, options) => {
-    if (url === '/workflows' && !options) {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?') && !options) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -238,8 +254,11 @@ test('user can cancel running workflow', async () => {
   }
 
   fetch.mockImplementation((url, options) => {
-    if (url === '/workflows' && !options) {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?') && !options) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -270,12 +289,25 @@ test('user can cancel running workflow', async () => {
 })
 
 test('polls workflows periodically', async () => {
+  const workflows = [
+    { id: 'poll-1', template: 'news', status: 'running', created_at: '2024-05-01T12:00:00Z' }
+  ]
+  const details = {
+    'poll-1': { id: 'poll-1', template: 'news', status: 'running', inputs: {}, result: {} }
+  }
+
   fetch.mockImplementation(url => {
-    if (url === '/workflows') {
+    if (url === '/workflow-triggers') {
       return mockResponse([])
+    }
+    if (url.startsWith('/workflows?')) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
+    }
+    if (url === '/workflows/poll-1') {
+      return mockResponse(details['poll-1'])
     }
     return mockResponse({})
   })
@@ -295,8 +327,11 @@ test('polls selected workflow only when running', async () => {
   }
 
   fetch.mockImplementation(url => {
-    if (url === '/workflows') {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?')) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -310,7 +345,7 @@ test('polls selected workflow only when running', async () => {
   render(<App />)
 
   const timer = require('./timer')
-  await waitFor(() => expect(timer.startPolling).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(timer.startPolling).toHaveBeenCalledTimes(3))
 })
 
 test('does not poll selected workflow when not running', async () => {
@@ -322,8 +357,11 @@ test('does not poll selected workflow when not running', async () => {
   }
 
   fetch.mockImplementation(url => {
-    if (url === '/workflows') {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?')) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -337,13 +375,12 @@ test('does not poll selected workflow when not running', async () => {
   render(<App />)
 
   const timer = require('./timer')
-  await waitFor(() => expect(timer.startPolling).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(timer.startPolling).toHaveBeenCalledTimes(0))
 })
 
 test('opens modal when thread_id is in URL query parameter', async () => {
-  const originalSearch = window.location.search
-  delete window.location
-  window.location = { search: '?thread_id=hitl-123' }
+  const originalHref = window.location.href
+  window.history.pushState({}, '', '?thread_id=hitl-123')
 
   const workflows = [
     { id: 'hitl-123', template: 'deepresearch', status: 'needs_input', created_at: '2024-06-01T10:00:00Z' }
@@ -359,8 +396,11 @@ test('opens modal when thread_id is in URL query parameter', async () => {
   }
 
   fetch.mockImplementation(url => {
-    if (url === '/workflows') {
-      return mockResponse(workflows)
+    if (url === '/workflow-triggers') {
+      return mockResponse([])
+    }
+    if (url.startsWith('/workflows?')) {
+      return mockResponse({ items: workflows, total: workflows.length, limit: workflows.length, offset: 0 })
     }
     if (url === '/workflow-templates') {
       return mockResponse([])
@@ -374,9 +414,10 @@ test('opens modal when thread_id is in URL query parameter', async () => {
   render(<App />)
 
   // Modal should open automatically with the workflow details
-  await screen.findByText('What is your answer?')
-  expect(screen.getByPlaceholderText('Enter your answer...')).toBeInTheDocument()
+  const modal = await screen.findByRole('dialog')
+  expect(within(modal).getByText('What is your answer?')).toBeInTheDocument()
+  expect(within(modal).getByPlaceholderText('Enter your answer...')).toBeInTheDocument()
 
   // Restore original location
-  window.location.search = originalSearch
+  window.history.pushState({}, '', originalHref)
 })

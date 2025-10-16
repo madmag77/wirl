@@ -5,15 +5,17 @@ import os
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
 import dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfoNotFoundError
 
 dotenv.load_dotenv()
 
@@ -33,8 +35,13 @@ from backend.models import (  # noqa: E402
     WorkflowRunStep,
     WorkflowRunWrite,
     WorkflowStatus,
+    WorkflowTrigger,
+    WorkflowTriggerCreate,
+    WorkflowTriggerResponse,
+    WorkflowTriggerUpdate,
 )
 from backend.workflow_loader import get_template, list_templates  # noqa: E402
+from backend.scheduler import ScheduleRunner, calculate_next_run
 
 
 def _filter_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -82,13 +89,17 @@ def _group_writes(writes: Optional[Iterable[Any]]) -> list[dict[str, Any]]:
     return grouped
 
 
+schedule_runner = ScheduleRunner()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
-    yield
-    # Shutdown
-    pass
+    schedule_runner.start()
+    try:
+        yield
+    finally:
+        await schedule_runner.stop()
 
 
 app = FastAPI(lifespan=lifespan, docs_url="/api/docs")
@@ -108,6 +119,108 @@ app.add_middleware(
 def templates() -> list[TemplateInfo]:
     templates_data = list_templates()
     return [TemplateInfo(**template) for template in templates_data]
+
+
+@app.get("/workflow-triggers", operation_id="getWorkflowTriggers")
+def workflow_triggers(db: Session = Depends(get_session)) -> list[WorkflowTriggerResponse]:
+    result = db.execute(select(WorkflowTrigger).order_by(WorkflowTrigger.created_at.desc()))
+    triggers = result.scalars().all()
+    return [WorkflowTriggerResponse.model_validate(trigger) for trigger in triggers]
+
+
+@app.post("/workflow-triggers", operation_id="createWorkflowTrigger", status_code=201)
+def create_workflow_trigger(
+    request: WorkflowTriggerCreate,
+    db: Session = Depends(get_session),
+) -> WorkflowTriggerResponse:
+    tpl = get_template(request.template_name)
+    if not tpl:
+        raise HTTPException(404, "Template not found")
+
+    next_run_at = None
+    if request.is_active:
+        try:
+            next_run_at = calculate_next_run(request.cron, request.timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise HTTPException(400, f"Unknown timezone '{request.timezone}'") from exc
+        except Exception as exc:
+            raise HTTPException(400, f"Invalid cron expression: {exc}") from exc
+
+    trigger = WorkflowTrigger(
+        name=request.name,
+        template_name=tpl["id"],
+        cron=request.cron,
+        timezone=request.timezone,
+        inputs=request.inputs,
+        is_active=request.is_active,
+        next_run_at=next_run_at,
+        last_error=None,
+    )
+    db.add(trigger)
+    db.commit()
+    db.refresh(trigger)
+    return WorkflowTriggerResponse.model_validate(trigger)
+
+
+@app.patch("/workflow-triggers/{trigger_id}", operation_id="updateWorkflowTrigger")
+def update_workflow_trigger(
+    trigger_id: str,
+    request: WorkflowTriggerUpdate,
+    db: Session = Depends(get_session),
+) -> WorkflowTriggerResponse:
+    trigger = db.get(WorkflowTrigger, trigger_id)
+    if not trigger:
+        raise HTTPException(404, "Trigger not found")
+
+    if request.name is not None:
+        trigger.name = request.name
+
+    if request.template_name is not None:
+        tpl = get_template(request.template_name)
+        if not tpl:
+            raise HTTPException(404, "Template not found")
+        trigger.template_name = tpl["id"]
+
+    if request.cron is not None:
+        trigger.cron = request.cron
+
+    if request.timezone is not None:
+        trigger.timezone = request.timezone
+
+    if request.inputs is not None:
+        trigger.inputs = request.inputs
+
+    if request.is_active is not None:
+        trigger.is_active = request.is_active
+
+    if trigger.is_active:
+        try:
+            trigger.next_run_at = calculate_next_run(
+                trigger.cron,
+                trigger.timezone,
+                from_time=datetime.now(timezone.utc),
+            )
+            trigger.last_error = None
+        except ZoneInfoNotFoundError as exc:
+            raise HTTPException(400, f"Unknown timezone '{trigger.timezone}'") from exc
+        except Exception as exc:
+            raise HTTPException(400, f"Invalid cron expression: {exc}") from exc
+    else:
+        trigger.next_run_at = None
+
+    db.commit()
+    db.refresh(trigger)
+    return WorkflowTriggerResponse.model_validate(trigger)
+
+
+@app.delete("/workflow-triggers/{trigger_id}", operation_id="deleteWorkflowTrigger", status_code=204)
+def delete_workflow_trigger(trigger_id: str, db: Session = Depends(get_session)) -> Response:
+    trigger = db.get(WorkflowTrigger, trigger_id)
+    if not trigger:
+        raise HTTPException(404, "Trigger not found")
+    db.delete(trigger)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/workflows", operation_id="getWorkflows")

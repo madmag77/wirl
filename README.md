@@ -78,7 +78,15 @@ scripts/mac-install-launchctl
 
 ### Schedule runs (optional)
 
-Add a GitHub Actions workflow (example: infra/github_actions_document_sort.yaml) or any scheduler/trigger that suits your environment.
+WIRL now ships with a **built-in cron-style scheduler** so you can run workflows on a cadence without deploying extra services:
+
+1. Open the frontend and go to **Triggers** (icon in the top navigation).
+2. Click **New Trigger** to define a name, pick a workflow template, provide JSON inputs, and enter a cron expression + timezone.
+3. Toggle the trigger on. The backend persists it to Postgres and shows the next run time.
+
+The FastAPI backend hosts a lightweight scheduler that polls the `workflow_triggers` table and enqueues runs whenever a trigger is due. The worker service picks up the queued run just like any manual execution, so no additional infrastructure is required. You can pause/resume triggers from the UI; invalid templates or cron expressions automatically disable the trigger and surface the error message inline.
+
+If you prefer external schedulers, you can still wire GitHub Actions (see `infra/github_actions_document_sort.yaml`) or any other job runner against the public API.
 
 ## UI at a glance
 
@@ -183,6 +191,17 @@ make run-workflow \
 - **Run details** with **inputs/outputs per node**, timestamps, durations, retry counts.
 - **Checkpoints** at every node allow precise **resume** and **retry**.
 
+### **Workflow triggers & scheduler**
+
+- **Data model**: persisted in Postgres via `workflow_triggers` (see `apps/backend/backend/models.py`).
+- **API**: CRUD endpoints under `/workflow-triggers` in `apps/backend/backend/main.py` expose trigger management to the UI.
+- **Scheduler**: `apps/backend/backend/scheduler.py` runs inside the FastAPI process, polling for due triggers and enqueueing runs.
+- **Duplicate protection**: the scheduler locks each due trigger row with `SELECT ... FOR UPDATE SKIP LOCKED`, refreshes `next_run_at`,
+  and aligns cron evaluation to the prior fire time so the same trigger cannot be enqueued twice within the same minute even if multiple
+  pollers overlap.
+- **UI**: React components in `apps/frontend/src/components/WorkflowTriggersTable.jsx` allow creating, editing, pausing, and deleting triggers alongside manual runs.
+- **Workers**: no change required; they keep polling the `workflow_runs` queue and execute runs spawned by triggers.
+
 ### **HITL (Human‑in‑the‑Loop)**
 
 - Declare a checkpoint with hitl { correlation: "...", timeout: "..." }. Those parameters are not being used and preserved for future implementation.
@@ -194,7 +213,7 @@ make run-workflow \
 - **LLM endpoints**: Any OpenAI‑compatible base URL/key (Ollama locally or hosted APIs).
 - **Database**: Postgres for run metadata and checkpoints (set DATABASE_URL or the backend’s required env vars).
 - **Secrets**: Provide via env vars; swap for your secret manager as needed.
-- **Scheduling**: cron, LaunchAgents/systemd, containers, or GitHub Actions (see infra/).
+- **Scheduling**: use the built-in cron runner (FastAPI `backend/scheduler.py`, UI in `apps/frontend/src/components/WorkflowTriggersTable.jsx`) or wire any external system such as LaunchAgents/systemd, containers, or GitHub Actions (see infra/).
 
 ### **Adding a new workflow**
 

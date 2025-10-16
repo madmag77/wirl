@@ -3,6 +3,22 @@ import { API_BASE_URL } from './constants.js'
 // Base URL configuration - can be overridden via environment variables
 const BASE_URL = API_BASE_URL
 
+async function handleJsonResponse(resp) {
+  if (!resp.ok) {
+    let message = `HTTP ${resp.status}: ${resp.statusText}`
+    try {
+      const body = await resp.json()
+      if (typeof body?.detail === 'string') {
+        message = body.detail
+      }
+    } catch (error) {
+      // Ignore JSON parsing errors for failed responses
+    }
+    throw new Error(message)
+  }
+  return resp.json()
+}
+
 /**
  * Fetch list of workflow runs.
  * @param {Object} [options]
@@ -11,22 +27,9 @@ const BASE_URL = API_BASE_URL
  * @returns {Promise<WorkflowHistoryPage>}
  */
 export async function getWorkflows({ limit = 10, offset = 0 } = {}) {
-  try {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-    const url = `${BASE_URL}/workflows?${params.toString()}`
-    console.log('Fetching workflows from:', url)
-    const resp = await fetch(url)
-    console.log('Response status:', resp.status, resp.statusText)
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
-    }
-    const data = await resp.json()
-    console.log('Parsed JSON data:', data)
-    return data
-  } catch (error) {
-    console.error('Error fetching workflows:', error)
-    throw error
-  }
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const resp = await fetch(`${BASE_URL}/workflows?${params.toString()}`)
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -35,7 +38,7 @@ export async function getWorkflows({ limit = 10, offset = 0 } = {}) {
  */
 export async function getWorkflowTemplates() {
   const resp = await fetch(`${BASE_URL}/workflow-templates`)
-  return resp.json()
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -45,7 +48,7 @@ export async function getWorkflowTemplates() {
  */
 export async function getWorkflow(id) {
   const resp = await fetch(`${BASE_URL}/workflows/${id}`)
-  return resp.json()
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -55,7 +58,7 @@ export async function getWorkflow(id) {
  */
 export async function getWorkflowRunDetails(id) {
   const resp = await fetch(`${BASE_URL}/workflows/${id}/run-details`)
-  return resp.json()
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -65,12 +68,20 @@ export async function getWorkflowRunDetails(id) {
  * @returns {Promise<WorkflowResponse>}
  */
 export async function startWorkflow(template, query) {
+  let inputs = {}
+  if (query && query.trim().length > 0) {
+    try {
+      inputs = JSON.parse(query)
+    } catch (error) {
+      inputs = { query }
+    }
+  }
   const resp = await fetch(`${BASE_URL}/workflows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ template_name: template, inputs: JSON.parse(query) })
+    body: JSON.stringify({ template_name: template, inputs })
   })
-  return resp.json()
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -85,7 +96,7 @@ export async function continueWorkflow(id, answer) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ inputs: { answer } })
   })
-  return resp.json()
+  return handleJsonResponse(resp)
 }
 
 /**
@@ -97,5 +108,66 @@ export async function cancelWorkflow(id) {
   const resp = await fetch(`${BASE_URL}/workflows/${id}/cancel`, {
     method: 'POST'
   })
-  return resp.json()
+  return handleJsonResponse(resp)
+}
+
+/**
+ * Fetch configured workflow triggers.
+ * @returns {Promise<WorkflowTriggerResponse[]>}
+ */
+export async function getWorkflowTriggers() {
+  const resp = await fetch(`${BASE_URL}/workflow-triggers`)
+  return handleJsonResponse(resp)
+}
+
+/**
+ * Create a new workflow trigger.
+ * @param {Object} payload
+ * @returns {Promise<WorkflowTriggerResponse>}
+ */
+export async function createWorkflowTrigger(payload) {
+  const resp = await fetch(`${BASE_URL}/workflow-triggers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  return handleJsonResponse(resp)
+}
+
+/**
+ * Update an existing workflow trigger.
+ * @param {string} id
+ * @param {Object} payload
+ * @returns {Promise<WorkflowTriggerResponse>}
+ */
+export async function updateWorkflowTrigger(id, payload) {
+  const resp = await fetch(`${BASE_URL}/workflow-triggers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  return handleJsonResponse(resp)
+}
+
+/**
+ * Delete a workflow trigger.
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+export async function deleteWorkflowTrigger(id) {
+  const resp = await fetch(`${BASE_URL}/workflow-triggers/${id}`, {
+    method: 'DELETE'
+  })
+  if (!resp.ok) {
+    let message = `HTTP ${resp.status}: ${resp.statusText}`
+    try {
+      const body = await resp.json()
+      if (typeof body?.detail === 'string') {
+        message = body.detail
+      }
+    } catch (error) {
+      // Ignore JSON parsing errors
+    }
+    throw new Error(message)
+  }
 }
