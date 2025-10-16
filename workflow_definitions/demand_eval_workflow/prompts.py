@@ -85,7 +85,6 @@ Description: {product_description}
 
 Question: How likely would you be to purchase this product?
 
-Please provide a detailed textual description of your purchase intent. Explain whether you would purchase this product and why, considering your demographic profile, lifestyle, and values. Do NOT provide a numeric rating - just describe your intent in words.
-
-Be specific about your level of interest (e.g., "definitely would", "probably would", "might", "probably not", "definitely not").
+Please provide a detailed textual description of your purchase intent (one paragraph). Explain whether you would purchase this product or not and why, considering your demographic profile, lifestyle, and values. Do NOT provide a numeric rating - just describe your intent in words.
+Don't hesitate to say you wouldn't buy this product if product is not a good fit for you. Be honest and blunt if needed.
 """
