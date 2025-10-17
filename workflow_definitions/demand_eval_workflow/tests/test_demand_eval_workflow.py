@@ -4,6 +4,7 @@ Tests for DemandEvalWorkflow.
 
 import pytest
 from unittest.mock import MagicMock, patch
+from wirl_pregel_runner import run_workflow
 
 from workflow_definitions.demand_eval_workflow.demand_eval_workflow import (
     Persona,
@@ -652,3 +653,190 @@ def test_full_workflow_with_report(tmp_path):
         report_content = report_files[0].read_text(encoding="utf-8")
         assert "Smart Watch" in report_content
         assert "Fitness tracking smartwatch" in report_content
+
+
+def test_demand_eval_workflow_e2e(tmp_path):
+    """End-to-end test of the demand evaluation workflow with mocked functions."""
+
+    # Create mock personas
+    mock_personas = [
+        Persona(
+            age=28,
+            gender="Female",
+            income_level="High",
+            education="Bachelor's Degree",
+            occupation="Software Engineer",
+            location="Urban",
+            lifestyle="Tech-savvy professional",
+            values=["Innovation", "Quality"],
+        ),
+        Persona(
+            age=45,
+            gender="Male",
+            income_level="Medium",
+            education="Master's Degree",
+            occupation="Teacher",
+            location="Suburban",
+            lifestyle="Family-oriented",
+            values=["Education", "Value"],
+        ),
+    ]
+
+    # Create mock evaluations
+    mock_evaluations = [
+        PersonaEvaluation(
+            persona=mock_personas[0],
+            purchase_intent=4.5,
+            intent_text="I would definitely purchase this product",
+            similarity_score=0.85,
+            pmfs=[0.05, 0.10, 0.15, 0.30, 0.40],
+        ),
+        PersonaEvaluation(
+            persona=mock_personas[1],
+            purchase_intent=3.2,
+            intent_text="I might consider purchasing this product",
+            similarity_score=0.70,
+            pmfs=[0.10, 0.20, 0.35, 0.25, 0.10],
+        ),
+    ]
+
+    # Create mock metrics
+    mock_metrics = DemandMetrics(
+        mean_purchase_intent=3.85,
+        std_purchase_intent=0.65,
+        high_intent_percentage=50.0,
+        medium_intent_percentage=50.0,
+        low_intent_percentage=0.0,
+        demographic_insights={
+            "age_18-35": 4.5,
+            "age_36-55": 3.2,
+            "income_High": 4.5,
+            "income_Medium": 3.2,
+            "location_Urban": 4.5,
+            "location_Suburban": 3.2,
+        },
+        total_personas=2,
+        mean_pmfs=[0.075, 0.15, 0.25, 0.275, 0.25],
+    )
+
+    # Mock functions for the workflow
+    def mock_generate_personas(num_personas: int, config: dict) -> dict:
+        return {"personas": mock_personas}
+
+    def mock_process_next_persona(
+        personas: list | None, initial_personas: list, config: dict
+    ) -> dict:
+        personas_to_process = personas if personas is not None else initial_personas
+        if not personas_to_process:
+            return {
+                "current_persona": {},
+                "remaining_personas": [],
+                "no_personas_left": True,
+            }
+        return {
+            "current_persona": personas_to_process[0],
+            "remaining_personas": personas_to_process[1:],
+            "no_personas_left": False,
+        }
+
+    def mock_get_purchase_intent(
+        persona: Persona, product_name: str, product_description: str, config: dict
+    ) -> dict:
+        # Return different intent text based on persona
+        if persona.age < 35:
+            return {"intent_text": "I would definitely purchase this product"}
+        else:
+            return {"intent_text": "I might consider purchasing this product"}
+
+    def mock_calculate_persona_metrics(
+        persona: Persona, intent_text: str, config: dict
+    ) -> dict:
+        # Return different evaluation based on persona
+        if persona.age < 35:
+            return {"evaluation": mock_evaluations[0]}
+        else:
+            return {"evaluation": mock_evaluations[1]}
+
+    def mock_collect_evaluations(
+        evaluation: PersonaEvaluation | None,
+        remaining_personas: list | None,
+        no_personas_left: bool | None,
+        config: dict,
+    ) -> dict:
+        if no_personas_left:
+            return {"is_done": True, "evaluations": []}
+        remaining = remaining_personas or []
+        is_done = len(remaining) == 0
+        return {
+            "is_done": is_done,
+            "evaluations": [evaluation] if evaluation else [],
+        }
+
+    def mock_analyze_demand(evaluations: list, product_name: str, config: dict) -> dict:
+        return {"metrics": mock_metrics}
+
+    def mock_save_report(
+        product_name: str,
+        product_description: str,
+        num_personas: int,
+        metrics: DemandMetrics,
+        report_path: str,
+        config: dict,
+    ) -> dict:
+        # Create the report file for testing
+        from pathlib import Path
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_product_name = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in product_name
+        )
+        filename = f"demand_eval_{safe_product_name}_{timestamp}.md"
+        report_dir = Path(report_path)
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = report_dir / filename
+        report_file.write_text("# Mock Report\n", encoding="utf-8")
+        return {"final_metrics": metrics}
+
+    # Function mapping for the workflow
+    FN_MAP = {
+        "generate_personas": mock_generate_personas,
+        "process_next_persona": mock_process_next_persona,
+        "get_purchase_intent": mock_get_purchase_intent,
+        "calculate_persona_metrics": mock_calculate_persona_metrics,
+        "collect_evaluations": mock_collect_evaluations,
+        "analyze_demand": mock_analyze_demand,
+        "save_report": mock_save_report,
+    }
+
+    # Run the workflow
+    report_path = tmp_path / "reports"
+    result = run_workflow(
+        "workflow_definitions/demand_eval_workflow/demand_eval_workflow.wirl",
+        fn_map=FN_MAP,
+        params={
+            "product_name": "Smart Watch",
+            "product_description": "Advanced fitness tracking smartwatch",
+            "num_personas": 2,
+            "report_path": str(report_path),
+        },
+    )
+
+    # Assert workflow outputs
+    assert "AnalyzeDemand.metrics" in result
+    metrics = result["AnalyzeDemand.metrics"]
+    assert metrics.mean_purchase_intent == 3.85
+    assert metrics.total_personas == 2
+    assert metrics.high_intent_percentage == 50.0
+
+    # Assert evaluations were collected
+    assert "EvaluationLoop.evaluations" in result
+    evaluations = result["EvaluationLoop.evaluations"]
+    assert len(evaluations) == 2
+    assert evaluations[0].purchase_intent == 4.5
+    assert evaluations[1].purchase_intent == 3.2
+
+    # Assert report was created
+    assert report_path.exists()
+    report_files = list(report_path.glob("demand_eval_*.md"))
+    assert len(report_files) == 1

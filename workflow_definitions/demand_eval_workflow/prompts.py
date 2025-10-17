@@ -67,7 +67,7 @@ def get_purchase_intent_prompt(
     Returns:
         Formatted prompt for purchase intent elicitation
     """
-    return f"""You are roleplaying as a market research participant with the following profile:
+    return f"""You are roleplaying as the persona described below.
 
 Age: {persona.age}
 Gender: {persona.gender}
@@ -78,13 +78,8 @@ Location: {persona.location}
 Lifestyle: {persona.lifestyle}
 Core Values: {', '.join(persona.values)}
 
-You are being asked to evaluate the following product:
+Question: How likely would you be to buy this product? Please answer honestly and bluntly with a detailed description of your reasoning.
 
 Product: {product_name}
 Description: {product_description}
-
-Question: How likely would you be to purchase this product?
-
-Please provide a detailed textual description of your purchase intent (one paragraph). Explain whether you would purchase this product or not and why, considering your demographic profile, lifestyle, and values. Do NOT provide a numeric rating - just describe your intent in words.
-Don't hesitate to say you wouldn't buy this product if product is not a good fit for you. Be honest and blunt if needed.
 """

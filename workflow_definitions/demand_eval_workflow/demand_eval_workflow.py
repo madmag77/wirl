@@ -84,11 +84,11 @@ class DemandMetrics(BaseModel):
 # Golden intent descriptions for 5-point Likert scale mapping
 # These represent canonical descriptions of purchase intent levels
 GOLDEN_INTENTS = {
-    1: "I would definitely not buy this.",
-    2: "I would probably not buy this.",
-    3: "I'm not sure if I would buy this.",
-    4: "I would probably buy this.",
-    5: "I would definitely buy this.",
+    1: "I would definitely not buy, not interested, not a good fit, or not needed",
+    2: "I would probably not buy, don't think I need it much",
+    3: "Depends on the price and features, only buy if it's a good deal",
+    4: "I would probably buy, it looks like a good fit, I may need it",
+    5: "I would definitely buy, it's exactly what I'm looking for, I need it",
 }
 
 
