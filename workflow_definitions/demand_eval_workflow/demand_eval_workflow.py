@@ -82,13 +82,43 @@ class DemandMetrics(BaseModel):
 
 
 # Golden intent descriptions for 5-point Likert scale mapping
-# These represent canonical descriptions of purchase intent levels
+# Each rating has 5 variations representing different reasoning patterns
 GOLDEN_INTENTS = {
-    1: "I would definitely not buy, not interested, not a good fit, or not needed",
-    2: "I would probably not buy, don't think I need it much",
-    3: "Depends on the price and features, only buy if it's a good deal",
-    4: "I would probably buy, it looks like a good fit, I may need it",
-    5: "I would definitely buy, it's exactly what I'm looking for, I need it",
+    1: [
+        "I would definitely not buy it as I don't need it at all",
+        "I would definitely not buy it because it's not a good fit for me",
+        "I would definitely not buy it as it's too expensive for what it offers",
+        "I would definitely not buy it as it lacks important features I need",
+        "I would definitely not buy it as I'm just not interested in this type of product",
+    ],
+    2: [
+        "I would probably not buy it as I don't really need it that much",
+        "I would probably not buy it because it doesn't seem like a great fit",
+        "I would probably not buy it as the price seems a bit high for the value",
+        "I would probably not buy it as it's missing some features I'd want",
+        "I would probably not buy it as it doesn't really appeal to me",
+    ],
+    3: [
+        "I might buy it depending on whether I actually need it or not",
+        "I might buy it if it turns out to be a good fit for my situation",
+        "I might buy it but only if the price and features align well",
+        "I might buy it if it has enough of the features I'm looking for",
+        "I might buy it if I become more interested after learning more about it",
+    ],
+    4: [
+        "I would probably buy it as I think I need something like this",
+        "I would probably buy it because it seems like a good fit for me",
+        "I would probably buy it as the price seems reasonable for the features",
+        "I would probably buy it as it has most of the features I want",
+        "I would probably buy it as it genuinely interests me",
+    ],
+    5: [
+        "I would definitely buy it as I absolutely need this right now",
+        "I would definitely buy it because it's exactly the right fit for me",
+        "I would definitely buy it as it offers excellent value for the price",
+        "I would definitely buy it as it has all the important features I need",
+        "I would definitely buy it as I'm very interested in this product",
+    ],
 }
 
 
@@ -111,6 +141,45 @@ def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
         return 0.0
 
     return float(dot_product / (norm1 * norm2))
+
+
+def calculate_golden_embeddings(num_personas: int, config: dict) -> dict:
+    """
+    Pre-calculate embeddings for all golden intent descriptions.
+
+    This calculates embeddings for all 5 variations of each rating level (1-5),
+    then computes the average embedding for each rating level. This runs once
+    before the evaluation loop starts.
+
+    Args:
+        num_personas: Number of personas (not used, but required for workflow dependency)
+        config: Runner config with embedding_model
+
+    Returns:
+        dict with golden_embeddings (list of 5 average embeddings, one per rating level)
+    """
+    embedding_model = config.get("embedding_model", "nomic-embed-text")
+
+    # Initialize embeddings model
+    embeddings = OllamaEmbeddings(model=embedding_model)
+
+    # Calculate embeddings for each rating level
+    golden_embeddings = []
+
+    for rating in range(1, 6):  # Ratings 1-5
+        rating_variations = GOLDEN_INTENTS[rating]
+
+        # Get embeddings for all variations
+        variation_embeddings = []
+        for intent_text in rating_variations:
+            embedding = np.array(embeddings.embed_query(intent_text))
+            variation_embeddings.append(embedding)
+
+        # Calculate average embedding for this rating
+        avg_embedding = np.mean(variation_embeddings, axis=0)
+        golden_embeddings.append(avg_embedding.tolist())
+
+    return {"golden_embeddings": golden_embeddings}
 
 
 def generate_personas(num_personas: int, config: dict) -> dict:
@@ -288,18 +357,24 @@ def get_purchase_intent(
     return {"intent_text": intent_text}
 
 
-def calculate_persona_metrics(persona: Persona, intent_text: str, config: dict) -> dict:
+def calculate_persona_metrics(
+    persona: Persona,
+    intent_text: str,
+    golden_embeddings: List[List[float]],
+    config: dict,
+) -> dict:
     """
     Calculate purchase intent metrics using semantic similarity to golden intents.
 
     This implements steps 2-4 of the research paper methodology:
     - Vectorize the intent text using embeddings
-    - Compare to golden intent descriptions via cosine similarity
+    - Compare to pre-calculated golden intent embeddings via cosine similarity
     - Compute probability-weighted rating (PMF approach)
 
     Args:
         persona: The persona who provided the intent
         intent_text: Textual description of purchase intent
+        golden_embeddings: Pre-calculated average embeddings for each rating level (1-5)
         config: Runner config with embedding_model
 
     Returns:
@@ -314,7 +389,7 @@ def calculate_persona_metrics(persona: Persona, intent_text: str, config: dict) 
     try:
         intent_embedding = np.array(embeddings.embed_query(intent_text[:5000]))
 
-        # Calculate similarities to all golden intents and compute expected rating
+        # Calculate similarities to all golden intent embeddings and compute expected rating
         # Following the paper's methodology:
         # 1. Get cosine similarities to all anchors
         # 2. Subtract minimum to shift range
@@ -323,11 +398,11 @@ def calculate_persona_metrics(persona: Persona, intent_text: str, config: dict) 
 
         similarities = []
         ratings = []
-        for rating, golden_text in sorted(GOLDEN_INTENTS.items()):
-            golden_embedding = np.array(embeddings.embed_query(golden_text))
+        for rating_idx, golden_embedding_list in enumerate(golden_embeddings):
+            golden_embedding = np.array(golden_embedding_list)
             similarity = cosine_similarity(intent_embedding, golden_embedding)
             similarities.append(similarity)
-            ratings.append(rating)
+            ratings.append(rating_idx + 1)  # Ratings are 1-5
 
         # Subtract minimum similarity
         min_sim = min(similarities)

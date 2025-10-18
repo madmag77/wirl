@@ -31,12 +31,26 @@ workflow DemandEvalWorkflow {
     }
   }
 
+  node CalculateGoldenEmbeddings {
+    call calculate_golden_embeddings
+    inputs {
+      Int num_personas = num_personas
+    }
+    const {
+      embedding_model: "embeddinggemma"
+    }
+    outputs {
+      List<List<Float>> golden_embeddings
+    }
+  }
+
   cycle EvaluationLoop {
     inputs {
       List<Object<Persona>> initial_personas = GeneratePersonas.personas
       List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas
       String product_name = product_name
       String product_description = product_description
+      List<List<Float>> golden_embeddings = CalculateGoldenEmbeddings.golden_embeddings
     }
     outputs {
       List<Object<PersonaEvaluation>> evaluations = CollectEvaluations.evaluations
@@ -75,6 +89,7 @@ workflow DemandEvalWorkflow {
       inputs {
         Object<Persona> persona = ProcessNextPersona.current_persona
         String intent_text = GetPurchaseIntent.intent_text
+        List<List<Float>> golden_embeddings = EvaluationLoop.golden_embeddings
       }
       const {
         embedding_model: "embeddinggemma"

@@ -11,6 +11,7 @@ from workflow_definitions.demand_eval_workflow.demand_eval_workflow import (
     PersonaEvaluation,
     DemandMetrics,
     generate_personas,
+    calculate_golden_embeddings,
     process_next_persona,
     get_purchase_intent,
     calculate_persona_metrics,
@@ -99,6 +100,30 @@ def test_generate_personas():
             assert len(persona.values) > 0
 
 
+def test_calculate_golden_embeddings():
+    """Test calculating golden embeddings."""
+    # Mock embeddings
+    mock_embeddings = MagicMock()
+    # Return embeddings that will be consistent
+    mock_embeddings.embed_query.return_value = [0.1] * 768  # Mock 768-dim embedding
+
+    with patch(
+        "workflow_definitions.demand_eval_workflow.demand_eval_workflow.OllamaEmbeddings",
+        return_value=mock_embeddings,
+    ):
+        result = calculate_golden_embeddings(
+            num_personas=10, config={"embedding_model": "nomic-embed-text"}
+        )
+
+        assert "golden_embeddings" in result
+        golden_embeddings = result["golden_embeddings"]
+        assert len(golden_embeddings) == 5  # 5 rating levels
+        for embedding in golden_embeddings:
+            assert len(embedding) == 768  # Check embedding dimension
+        # Verify that embed_query was called 25 times (5 variations × 5 rating levels)
+        assert mock_embeddings.embed_query.call_count == 25
+
+
 def test_process_next_persona_first_iteration(sample_persona):
     """Test processing first persona."""
     personas = [sample_persona]
@@ -156,6 +181,9 @@ def test_calculate_persona_metrics(sample_persona):
     """Test calculating persona metrics with mocked embeddings."""
     intent_text = "I would very likely purchase this product as it aligns perfectly with my tech-savvy lifestyle and values of innovation."
 
+    # Mock golden embeddings (5 average embeddings, one per rating level)
+    mock_golden_embeddings = [[0.1] * 768 for _ in range(5)]
+
     # Mock embeddings
     mock_embeddings = MagicMock()
     # Return embeddings that will be consistent
@@ -168,6 +196,7 @@ def test_calculate_persona_metrics(sample_persona):
         result = calculate_persona_metrics(
             persona=sample_persona,
             intent_text=intent_text,
+            golden_embeddings=mock_golden_embeddings,
             config={
                 "embedding_model": "nomic-embed-text",
             },
@@ -507,6 +536,9 @@ def test_full_workflow_integration():
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 768
 
+    # Mock golden embeddings (5 average embeddings, one per rating level)
+    mock_golden_embeddings = [[0.1] * 768 for _ in range(5)]
+
     with (
         patch(
             "workflow_definitions.demand_eval_workflow.demand_eval_workflow.ChatOllama"
@@ -545,6 +577,7 @@ def test_full_workflow_integration():
             eval_result = calculate_persona_metrics(
                 persona=persona,
                 intent_text=intent_text,
+                golden_embeddings=mock_golden_embeddings,
                 config={"embedding_model": "nomic-embed-text"},
             )
             evaluations.append(eval_result["evaluation"])
@@ -589,6 +622,9 @@ def test_full_workflow_with_report(tmp_path):
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 768
 
+    # Mock golden embeddings (5 average embeddings, one per rating level)
+    mock_golden_embeddings = [[0.1] * 768 for _ in range(5)]
+
     with (
         patch(
             "workflow_definitions.demand_eval_workflow.demand_eval_workflow.ChatOllama"
@@ -622,6 +658,7 @@ def test_full_workflow_with_report(tmp_path):
             eval_result = calculate_persona_metrics(
                 persona=persona,
                 intent_text=intent_text,
+                golden_embeddings=mock_golden_embeddings,
                 config={"embedding_model": "nomic-embed-text"},
             )
             evaluations.append(eval_result["evaluation"])
@@ -748,8 +785,15 @@ def test_demand_eval_workflow_e2e(tmp_path):
         else:
             return {"intent_text": "I might consider purchasing this product"}
 
+    def mock_calculate_golden_embeddings(num_personas: int, config: dict) -> dict:
+        # Return mock golden embeddings
+        return {"golden_embeddings": [[0.1] * 768 for _ in range(5)]}
+
     def mock_calculate_persona_metrics(
-        persona: Persona, intent_text: str, config: dict
+        persona: Persona,
+        intent_text: str,
+        golden_embeddings: list,
+        config: dict,
     ) -> dict:
         # Return different evaluation based on persona
         if persona.age < 35:
@@ -801,6 +845,7 @@ def test_demand_eval_workflow_e2e(tmp_path):
     # Function mapping for the workflow
     FN_MAP = {
         "generate_personas": mock_generate_personas,
+        "calculate_golden_embeddings": mock_calculate_golden_embeddings,
         "process_next_persona": mock_process_next_persona,
         "get_purchase_intent": mock_get_purchase_intent,
         "calculate_persona_metrics": mock_calculate_persona_metrics,

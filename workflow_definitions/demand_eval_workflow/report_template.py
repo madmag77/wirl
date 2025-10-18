@@ -14,12 +14,43 @@ if TYPE_CHECKING:
 
 
 # Golden intent descriptions for display in reports
+# Each rating has 5 variations representing different reasoning patterns
 GOLDEN_INTENTS = {
-    1: "I would definitely not purchase this product. It does not meet my needs at all and I have no interest in it whatsoever.",
-    2: "I would probably not purchase this product. It doesn't really appeal to me and I don't see much value in it.",
-    3: "I might or might not purchase this product. I'm neutral about it - it has both pros and cons that balance out.",
-    4: "I would probably purchase this product. It seems like a good fit for my needs and I'm fairly interested in it.",
-    5: "I would definitely purchase this product. It's exactly what I'm looking for and I'm highly interested in buying it.",
+    1: [
+        "I would definitely not buy it as I don't need it at all",
+        "I would definitely not buy it because it's not a good fit for me",
+        "I would definitely not buy it as it's too expensive for what it offers",
+        "I would definitely not buy it as it lacks important features I need",
+        "I would definitely not buy it as I'm just not interested in this type of product",
+    ],
+    2: [
+        "I would probably not buy it as I don't really need it that much",
+        "I would probably not buy it because it doesn't seem like a great fit",
+        "I would probably not buy it as the price seems a bit high for the value",
+        "I would probably not buy it as it's missing some features I'd want",
+        "I would probably not buy it as it doesn't really appeal to me",
+    ],
+    3: [
+        "I might buy it depending on whether I actually need it or not",
+        "I might buy it if it turns out to be a good fit for my situation",
+        "I might buy it but only if the price and features align well",
+        "I might buy it if it has enough of the features I'm looking for",
+        "I might buy it if I become more interested after learning more about it",
+    ],
+    4: [
+        "I would probably buy it as I think I need something like this",
+        "I would probably buy it because it seems like a good fit for me",
+        "I would probably buy it as the price seems reasonable for the features",
+        "I would probably buy it as it has most of the features I want",
+        "I would probably buy it as it genuinely interests me",
+    ],
+    5: [
+        "I would definitely buy it as I absolutely need this right now",
+        "I would definitely buy it because it's exactly the right fit for me",
+        "I would definitely buy it as it offers excellent value for the price",
+        "I would definitely buy it as it has all the important features I need",
+        "I would definitely buy it as I'm very interested in this product",
+    ],
 }
 
 
@@ -127,10 +158,21 @@ def _generate_pmf_table(mean_pmfs: list[float]) -> str:
         "5 - Definitely Would",
     ]
 
-    for i, (label, prob) in enumerate(zip(rating_labels, mean_pmfs)):
-        table += f"| {label} | {GOLDEN_INTENTS[i+1][:50]}... | {prob:.3f} ({prob*100:.1f}%) |\n"
+    # Summarized descriptions for each rating (representing all 5 variations)
+    rating_descriptions = {
+        1: "Would definitely not buy (various reasons: no need, bad fit, too expensive, lacks features, no interest)",
+        2: "Would probably not buy (various reasons: limited need, poor fit, high price, missing features, low appeal)",
+        3: "Might buy (depends on: need, fit, price/features, features, interest level)",
+        4: "Would probably buy (various reasons: need, good fit, fair price, has features, interesting)",
+        5: "Would definitely buy (various reasons: urgent need, perfect fit, great value, all features, very interested)",
+    }
 
-    table += "\n*Note: These probabilities are averaged across all persona evaluations and represent the distribution of semantic similarity to each anchor rating.*\n"
+    for i, (label, prob) in enumerate(zip(rating_labels, mean_pmfs)):
+        table += (
+            f"| {label} | {rating_descriptions[i+1]} | {prob:.3f} ({prob*100:.1f}%) |\n"
+        )
+
+    table += "\n*Note: These probabilities are averaged across all persona evaluations and represent the distribution of semantic similarity to each anchor rating. Each rating is based on 5 golden intent variations covering different reasoning patterns (need, fit, price, features, interest).*\n"
 
     return table
 
@@ -239,6 +281,13 @@ Purchase intent ratings are calculated using a probability-weighted semantic sim
 1. Each persona provides textual purchase intent (not numeric)
 2. Text is vectorized using Nomic embeddings
 3. Cosine similarities are calculated against 5 golden intent anchors
+   - Each anchor represents one rating level (1-5)
+   - Each anchor is computed as the average embedding of 5 variations covering different reasoning patterns:
+     * Need-based reasoning (do I need it?)
+     * Fit-based reasoning (is it right for me?)
+     * Price-based reasoning (is it worth the cost?)
+     * Feature-based reasoning (does it have what I want?)
+     * Interest-based reasoning (does it appeal to me?)
 4. Similarities are transformed into a probability mass function (PMF):
    - Subtract minimum similarity to shift range
    - Normalize to create a probability distribution over the 5 rating levels

@@ -38,12 +38,22 @@ Instead of asking LLMs for numeric ratings directly (which can be biased), the w
 
 ### Golden Intent Descriptions
 
-The workflow uses these canonical descriptions for the 5-point scale:
-- **1**: "I would definitely not purchase... no interest whatsoever"
-- **2**: "I would probably not purchase... doesn't appeal to me"
-- **3**: "I might or might not... neutral about it"
-- **4**: "I would probably purchase... seems like a good fit"
-- **5**: "I would definitely purchase... exactly what I'm looking for"
+The workflow uses a comprehensive set of canonical descriptions for the 5-point scale. Each rating level has **5 variations** representing different reasoning patterns:
+
+1. **Need-based reasoning**: "Do I need it?"
+2. **Fit-based reasoning**: "Is it right for me?"
+3. **Price-based reasoning**: "Is it worth the cost?"
+4. **Feature-based reasoning**: "Does it have what I want?"
+5. **Interest-based reasoning**: "Does it appeal to me?"
+
+For example, Rating 1 (Definitely NOT) includes:
+- "I would definitely not buy it as I don't need it at all"
+- "I would definitely not buy it because it's not a good fit for me"
+- "I would definitely not buy it as it's too expensive for what it offers"
+- "I would definitely not buy it as it lacks important features I need"
+- "I would definitely not buy it as I'm just not interested in this type of product"
+
+Each rating level (1-5) has similar variations across these 5 reasoning dimensions, providing a more robust semantic similarity matching that captures diverse ways people express purchase intent.
 
 ### Example Calculation
 
@@ -84,23 +94,29 @@ This probability-weighted approach provides more nuanced ratings than simple "be
    - Varies gender, income level, education, and location
    - Uses LLM to generate realistic occupation, lifestyle, and values
 
-2. **EvaluationLoop**: Iterates through each persona to evaluate the product
+2. **CalculateGoldenEmbeddings**: Pre-calculates embeddings for all golden intent variations
+   - Computes embeddings for all 25 golden intent descriptions (5 variations × 5 rating levels)
+   - Averages the 5 variations for each rating level to create 5 anchor embeddings
+   - **Runs once** before the evaluation loop for efficiency
+   - These pre-calculated embeddings are passed to the cycle and reused for all persona evaluations
+
+3. **EvaluationLoop**: Iterates through each persona to evaluate the product
    - **ProcessNextPersona**: Manages iteration through personas
    - **GetPurchaseIntent**: Gets **textual purchase intent** from each persona
      - Uses LLM to elicit natural language description of purchase intent (not numeric)
      - Avoids rating bias by asking for words instead of numbers
    - **CalculatePersonaMetrics**: Converts intent text to rating using semantic similarity
      - Converts text to vector using **Nomic embeddings**
-     - Calculates **cosine similarity** to all 5 golden intent descriptions
+     - Calculates **cosine similarity** to the 5 pre-calculated golden anchor embeddings
      - Computes **expected rating** (1-5 continuous scale) using probability-weighted approach
    - **CollectEvaluations**: Accumulates evaluation results with similarity scores
 
-3. **AnalyzeDemand**: Computes aggregate metrics and demographic insights
+4. **AnalyzeDemand**: Computes aggregate metrics and demographic insights
    - Calculates mean, standard deviation, and distribution statistics
    - Breaks down purchase intent by demographic segments
    - Identifies high-intent segments for targeted marketing
 
-4. **SaveReport**: Generates comprehensive Markdown report
+5. **SaveReport**: Generates comprehensive Markdown report
    - Creates timestamped report file: `demand_eval_ProductName_YYYYMMDD_HHMMSS.md`
    - Includes product details, metrics, demographic insights, and recommendations
    - Automatic demand assessment (Strong 🟢 / Moderate 🟡 / Low 🔴)
@@ -432,7 +448,7 @@ No configuration needed - automatically generates reports based on metrics
 4. **Cultural Context**: Ensure the LLM is trained on relevant cultural contexts
 5. **Sample Size**: Larger persona counts (50-100+) provide more reliable statistics
 6. **Validation**: Consider running pilot studies with real users to validate synthetic results
-7. **Golden Intent Calibration**: The 5 golden intents are calibrated for general product evaluation; you may customize them for specific domains
+7. **Golden Intent Calibration**: The 25 golden intent variations (5 per rating level) are calibrated for general product evaluation covering different reasoning patterns (need, fit, price, features, interest); you may customize them for specific domains or add more variations
 8. **Continuous Ratings**: Ratings are computed as expected values (e.g., 3.6), providing more granular insights than discrete integers
 9. **Report Storage**: Reports are saved locally; ensure adequate disk space and appropriate file permissions for `report_path`
 10. **Timestamp Collisions**: Running multiple evaluations in the same second may need manual handling
