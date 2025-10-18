@@ -19,6 +19,22 @@ This guide tells you where the code is, what rules to follow, and how to run, de
 - **Runner wiring**: grammar changes are inert until the runner knows how to execute them. Extend `pregel_graph_builder.py` if the new syntax affects scheduling, dependencies, guards, reducers, etc.
 - **VSCode extension**: update tokens/keywords in `extensions/vscode/syntaxes/wirl.tmLanguage.json` to keep highlighting in sync; re‑package the extension.
 
+### WIRL language rules
+
+When authoring or modifying `.wirl` workflows, follow these fundamental rules:
+
+1. **Input and output parameters are mandatory**: Every workflow must declare `input` and `output` parameters. Workflows without both will not execute properly.
+
+2. **First node must depend on an input parameter**: The first node to run must have a dependency on at least one of the workflow's input parameters. Without this dependency, the workflow will not start execution.
+
+3. **Cycle node inputs are restricted**: Inside cycles, nodes can only use:
+   - Inputs from neighboring nodes within the cycle
+   - Inputs of the cycle itself
+
+   Inputs from outside the cycle are not directly accessible and must be proxied through cycle input parameters to be available inside the cycle.
+
+4. **Dotted notation inside cycles**: Inside a cycle, all input values must use dotted notation, even when referencing the cycle's own inputs. For example, if you're inside a cycle named `ProcessItems`, reference cycle inputs as `ProcessItems.cycleInput` rather than just `cycleInput`.
+
 ### Run, debug, test
 
 #### Environment setup (repo root)

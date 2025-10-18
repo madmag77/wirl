@@ -10,11 +10,11 @@ check-uv:
 init-venv: check-uv
 	uv venv $(VENV)
 
-install-core: init-venv
+install-core: init-venv install-precommit
 	UV_PYTHON=$(PY) $(MAKE) -C $(ROOT)/packages/wirl-lang install
 	UV_PYTHON=$(PY) $(MAKE) -C $(ROOT)/packages/wirl-pregel-runner install
 
-install-core-dev: init-venv
+install-core-dev: init-venv install-precommit
 	UV_PYTHON=$(PY) $(MAKE) -C $(ROOT)/packages/wirl-lang install-dev
 	UV_PYTHON=$(PY) $(MAKE) -C $(ROOT)/packages/wirl-pregel-runner install-dev
 

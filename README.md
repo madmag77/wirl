@@ -124,14 +124,30 @@ infra/                   # macOS launchctl, CI examples, etc.
 ### Authoring model
 
 - **Separate the plan from the code.**
-  - The **graph** lives in a .wirl file. This is the “plan”: nodes, edges, branches, cycles, guards, and HITL.
-  - The **logic** lives in **pure Python** functions that match each node’s call target.
+  - The **graph** lives in a .wirl file. This is the "plan": nodes, edges, branches, cycles, guards, and HITL.
+  - The **logic** lives in **pure Python** functions that match each node's call target.
 - **LLM‑friendly flow.**
     1. Use Cursor/Windsurf to generate the .wirl graph from a natural‑language description. There is a very detailed `Agents.md` file to help LLMs do it with good quality.
     2. Generate the Python module with node functions (pure, testable).
     3. Review the .wirl diff to verify control‑flow instantly.
 - **Deterministic control‑flow.**
     Models can be stochastic; the **graph is not**. Guards and cycle limits are explicit and reviewable.
+
+### WIRL language rules
+
+When authoring `.wirl` workflows, follow these fundamental rules:
+
+1. **Input and output parameters are mandatory**: Every workflow must declare `input` and `output` parameters. Workflows without both will not execute properly.
+
+2. **First node must depend on an input parameter**: The first node to run must have a dependency on at least one of the workflow's input parameters. Without this dependency, the workflow will not start execution.
+
+3. **Cycle node inputs are restricted**: Inside cycles, nodes can only use:
+   - Inputs from neighboring nodes within the cycle
+   - Inputs of the cycle itself
+
+   Inputs from outside the cycle are not directly accessible and must be proxied through cycle input parameters to be available inside the cycle.
+
+4. **Dotted notation inside cycles**: Inside a cycle, all input values must use dotted notation, even when referencing the cycle's own inputs. For example, if you're inside a cycle named `ProcessItems`, reference cycle inputs as `ProcessItems.cycleInput` rather than just `cycleInput`.
 
 ### **Writing node functions (pattern)**
 
