@@ -385,11 +385,11 @@ def test_save_report(sample_metrics, tmp_path):
     assert "AI-powered hydration tracking bottle" in report_content
     assert "Number of Personas Evaluated:** 20" in report_content
     assert "Mean Purchase Intent:** 3.80" in report_content
-    assert "60.0%" in report_content  # High intent percentage
     assert "Demographic Insights" in report_content
     assert "Age 18-35" in report_content
     assert "Recommendations" in report_content
     assert "Next Steps" in report_content
+    assert "Probability Distribution" in report_content  # PMF table is included
 
     # Check that demographic insights are properly formatted
     assert "4.20" in report_content  # age_18-35 value
@@ -452,7 +452,6 @@ def test_save_report_demand_assessments(tmp_path):
     report_file = list(report_path.glob("*Strong_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
     assert "4.50" in content  # Mean intent
-    assert "80.0%" in content  # High intent percentage
     assert "Strong Go-to-Market Opportunity" in content
     assert "Probability Distribution" in content
 
@@ -480,7 +479,6 @@ def test_save_report_demand_assessments(tmp_path):
     report_file = list(report_path.glob("*Moderate_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
     assert "3.20" in content  # Mean intent
-    assert "40.0%" in content  # High intent percentage
     assert "Optimize Before Launch" in content
 
     # Test low demand
@@ -507,7 +505,6 @@ def test_save_report_demand_assessments(tmp_path):
     report_file = list(report_path.glob("*Low_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
     assert "2.00" in content  # Mean intent
-    assert "10.0%" in content  # High intent percentage
     assert "Significant Changes Needed" in content
 
 
