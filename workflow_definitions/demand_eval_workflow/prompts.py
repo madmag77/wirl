@@ -16,6 +16,7 @@ def get_persona_generation_prompt(
     income: str,
     education: str,
     location: str,
+    family_status: str,
 ) -> str:
     """
     Generate a prompt for creating a persona profile.
@@ -26,7 +27,7 @@ def get_persona_generation_prompt(
         income: Income level (Low, Medium, High)
         education: Education level
         location: Geographic location
-
+        family_status: Family status
     Returns:
         Formatted prompt for persona generation
     """
@@ -38,6 +39,7 @@ Demographics:
 - Income Level: {income}
 - Education: {education}
 - Location: {location}
+- Family Status: {family_status}
 
 Please provide:
 1. A specific occupation that fits these demographics

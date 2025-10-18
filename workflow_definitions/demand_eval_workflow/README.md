@@ -246,14 +246,11 @@ Reports include timestamp to track multiple evaluations over time.
 #### Report Contents
 
 1. **Product Information**: Name, description, number of personas evaluated
-2. **Executive Summary**: Key metrics with visual indicators
+2. **Executive Summary**: Mean intent, standard deviation, and high-intent percentage
 3. **Probability Distribution (Mean PMF)**: Table showing average probability for each rating level across all personas
-4. **Demand Assessment**: Automatic categorization (Strong 🟢, Moderate 🟡, Low 🔴)
-5. **Demographic Insights**: Sorted table showing purchase intent by segment
-6. **Key Findings**: Highest/lowest intent segments and recommended targets
-7. **Methodology**: Explanation of semantic similarity approach
-8. **Recommendations**: Actionable next steps based on demand level
-9. **Next Steps**: Concrete actions for validation and iteration
+4. **Demographic Insights**: Sorted table showing purchase intent by segment with highest/lowest
+5. **Recommendations**: Actionable next steps based on demand level
+6. **Next Steps**: Concrete actions for validation and iteration
 
 **Example Report Excerpt:**
 
@@ -264,38 +261,31 @@ Reports include timestamp to track multiple evaluations over time.
 
 ## Executive Summary
 
-### Overall Purchase Intent
 - **Mean Purchase Intent:** 4.20 / 5.0
 - **Standard Deviation:** 0.80
 
-### Intent Distribution
-| Category | Percentage |
-|----------|-----------|
-| **High Intent** (≥ 4.0) | 65.0% |
-| **Medium Intent** (2.5 - 4.0) | 25.0% |
-| **Low Intent** (< 2.5) | 10.0% |
-
 ### Probability Distribution (Mean PMF)
+
+Average probability across all personas for each rating level:
 
 | Rating | Description | Mean Probability |
 |--------|-------------|------------------|
-| 1 - Definitely NOT | I would definitely not purchase this product... | 0.050 (5.0%) |
-| 2 - Probably NOT | I would probably not purchase this product... | 0.080 (8.0%) |
-| 3 - Neutral/Might | I might or might not purchase this product... | 0.150 (15.0%) |
-| 4 - Probably Would | I would probably purchase this product... | 0.350 (35.0%) |
-| 5 - Definitely Would | I would definitely purchase this product... | 0.370 (37.0%) |
+| 1 - Would NOT | Would not buy (no need, bad fit, too expensive...) | 0.050 (5.0%) |
+| 2 - Probably NOT | Probably would not buy (limited need, poor fit...) | 0.080 (8.0%) |
+| 3 - Might Buy | Might buy depending on circumstances | 0.150 (15.0%) |
+| 4 - Probably Would | Would probably buy (seems like good fit...) | 0.350 (35.0%) |
+| 5 - Would Buy | Would buy (good fit for needs, great value...) | 0.370 (37.0%) |
 
-*Note: These probabilities represent the average distribution of semantic similarity across all personas.*
+*Probabilities show semantic similarity to each rating anchor across all persona responses.*
 
-## Demand Assessment
-
-**Strong Demand** 🟢
-
-The product shows strong market demand with high purchase intent...
+---
 
 ## Demographic Insights
-| Demographic Segment | Mean Purchase Intent |
-|---------------------|---------------------|
+
+Purchase intent by segment (sorted highest to lowest):
+
+| Segment | Mean Intent |
+|---------|-------------|
 | Income High | 4.80 |
 | Age 18-35 | 4.50 |
 | Location Urban | 4.40 |

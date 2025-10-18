@@ -388,8 +388,8 @@ def test_save_report(sample_metrics, tmp_path):
     assert "60.0%" in report_content  # High intent percentage
     assert "Demographic Insights" in report_content
     assert "Age 18-35" in report_content
-    assert "Methodology" in report_content
     assert "Recommendations" in report_content
+    assert "Next Steps" in report_content
 
     # Check that demographic insights are properly formatted
     assert "4.20" in report_content  # age_18-35 value
@@ -425,7 +425,7 @@ def test_save_report_with_special_characters(sample_metrics, tmp_path):
 
 
 def test_save_report_demand_assessments(tmp_path):
-    """Test different demand assessment categories in report."""
+    """Test different PMF distributions and recommendations in report."""
     report_path = tmp_path / "reports"
 
     # Test strong demand
@@ -451,8 +451,10 @@ def test_save_report_demand_assessments(tmp_path):
 
     report_file = list(report_path.glob("*Strong_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
-    assert "**Strong Demand** 🟢" in content
+    assert "4.50" in content  # Mean intent
+    assert "80.0%" in content  # High intent percentage
     assert "Strong Go-to-Market Opportunity" in content
+    assert "Probability Distribution" in content
 
     # Test moderate demand
     moderate_metrics = DemandMetrics(
@@ -477,7 +479,8 @@ def test_save_report_demand_assessments(tmp_path):
 
     report_file = list(report_path.glob("*Moderate_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
-    assert "**Moderate Demand** 🟡" in content
+    assert "3.20" in content  # Mean intent
+    assert "40.0%" in content  # High intent percentage
     assert "Optimize Before Launch" in content
 
     # Test low demand
@@ -503,7 +506,8 @@ def test_save_report_demand_assessments(tmp_path):
 
     report_file = list(report_path.glob("*Low_Product*.md"))[0]
     content = report_file.read_text(encoding="utf-8")
-    assert "**Low Demand** 🔴" in content
+    assert "2.00" in content  # Mean intent
+    assert "10.0%" in content  # High intent percentage
     assert "Significant Changes Needed" in content
 
 

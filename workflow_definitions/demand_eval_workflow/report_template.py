@@ -45,11 +45,11 @@ GOLDEN_INTENTS = {
         "I would probably buy it as it genuinely interests me",
     ],
     5: [
-        "I would definitely buy it as I absolutely need this right now",
-        "I would definitely buy it because it's exactly the right fit for me",
-        "I would definitely buy it as it offers excellent value for the price",
-        "I would definitely buy it as it has all the important features I need",
-        "I would definitely buy it as I'm very interested in this product",
+        "I would buy it as I need something like this",
+        "I would buy it because it's a good fit for my needs",
+        "I would buy it as it offers great value for the price",
+        "I would buy it as it has the features I'm looking for",
+        "I would buy it as I'm quite interested in this product",
     ],
 }
 
@@ -81,15 +81,10 @@ def generate_report_content(
     # Add PMF table if available
     if metrics.mean_pmfs and len(metrics.mean_pmfs) == 5:
         report += _generate_pmf_table(metrics.mean_pmfs)
-
-    # Add demand assessment
-    report += _generate_demand_assessment(metrics)
+        report += "\n---\n\n"
 
     # Add demographic insights
     report += _generate_demographic_insights(metrics)
-
-    # Add methodology section
-    report += _generate_methodology()
 
     # Add recommendations
     report += _generate_recommendations(metrics)
@@ -125,22 +120,12 @@ def _generate_executive_summary(metrics: "DemandMetrics") -> str:
     """Generate the executive summary section."""
     return f"""## Executive Summary
 
-### Overall Purchase Intent
-
 - **Mean Purchase Intent:** {metrics.mean_purchase_intent:.2f} / 5.0
 - **Standard Deviation:** {metrics.std_purchase_intent:.2f}
 
-### Intent Distribution
-
-| Category | Percentage |
-|----------|-----------|
-| **High Intent** (≥ 4.0) | {metrics.high_intent_percentage:.1f}% |
-| **Medium Intent** (2.5 - 4.0) | {metrics.medium_intent_percentage:.1f}% |
-| **Low Intent** (< 2.5) | {metrics.low_intent_percentage:.1f}% |
-
 ### Probability Distribution (Mean PMF)
 
-The following table shows the average probability distribution across all personas for each rating level. This represents how likely personas are to have each specific purchase intent level based on semantic similarity to golden anchors:
+Average probability across all personas for each rating level:
 
 """
 
@@ -151,20 +136,20 @@ def _generate_pmf_table(mean_pmfs: list[float]) -> str:
     table += "|--------|-------------|------------------|\n"
 
     rating_labels = [
-        "1 - Definitely NOT",
+        "1 - Would NOT",
         "2 - Probably NOT",
-        "3 - Neutral/Might",
+        "3 - Might Buy",
         "4 - Probably Would",
-        "5 - Definitely Would",
+        "5 - Would Buy",
     ]
 
     # Summarized descriptions for each rating (representing all 5 variations)
     rating_descriptions = {
-        1: "Would definitely not buy (various reasons: no need, bad fit, too expensive, lacks features, no interest)",
-        2: "Would probably not buy (various reasons: limited need, poor fit, high price, missing features, low appeal)",
-        3: "Might buy (depends on: need, fit, price/features, features, interest level)",
-        4: "Would probably buy (various reasons: need, good fit, fair price, has features, interesting)",
-        5: "Would definitely buy (various reasons: urgent need, perfect fit, great value, all features, very interested)",
+        1: "Would not buy (no need, bad fit, too expensive, lacks features, no interest)",
+        2: "Probably would not buy (limited need, poor fit, high price, missing features, low appeal)",
+        3: "Might buy depending on circumstances (need, fit, price/features alignment)",
+        4: "Would probably buy (seems like good fit, reasonable price, has desired features)",
+        5: "Would buy (good fit for needs, great value, has features I'm looking for)",
     }
 
     for i, (label, prob) in enumerate(zip(rating_labels, mean_pmfs)):
@@ -172,61 +157,22 @@ def _generate_pmf_table(mean_pmfs: list[float]) -> str:
             f"| {label} | {rating_descriptions[i+1]} | {prob:.3f} ({prob*100:.1f}%) |\n"
         )
 
-    table += "\n*Note: These probabilities are averaged across all persona evaluations and represent the distribution of semantic similarity to each anchor rating. Each rating is based on 5 golden intent variations covering different reasoning patterns (need, fit, price, features, interest).*\n"
+    table += "\n*Probabilities show semantic similarity to each rating anchor across all persona responses.*\n"
 
     return table
-
-
-def _generate_demand_assessment(metrics: "DemandMetrics") -> str:
-    """Generate the demand assessment section."""
-    mean_intent = metrics.mean_purchase_intent
-
-    if mean_intent >= 4.0:
-        assessment = "**Strong Demand** 🟢"
-        interpretation = (
-            "The product shows strong market demand with high purchase intent. "
-            "This indicates good product-market fit and suggests proceeding with development/launch."
-        )
-    elif mean_intent >= 3.0:
-        assessment = "**Moderate Demand** 🟡"
-        interpretation = (
-            "The product shows moderate market demand. Consider refining the value "
-            "proposition or targeting specific high-intent demographic segments identified below."
-        )
-    else:
-        assessment = "**Low Demand** 🔴"
-        interpretation = (
-            "The product shows limited market demand. Significant changes to the product "
-            "concept, positioning, or target market may be needed."
-        )
-
-    return f"""
----
-
-## Demand Assessment
-
-{assessment}
-
-{interpretation}
-
-**High Intent Personas:** {metrics.high_intent_percentage:.1f}% of evaluated personas are likely to purchase (rating ≥ 4.0).
-
----
-
-"""
 
 
 def _generate_demographic_insights(metrics: "DemandMetrics") -> str:
     """Generate the demographic insights section."""
     content = """## Demographic Insights
 
-The following segments show varying levels of purchase intent:
+Purchase intent by segment (sorted highest to lowest):
 
 """
 
     if metrics.demographic_insights:
-        content += "| Demographic Segment | Mean Purchase Intent |\n"
-        content += "|---------------------|---------------------|\n"
+        content += "| Segment | Mean Intent |\n"
+        content += "|---------|-------------|\n"
 
         # Sort by intent (highest first)
         sorted_insights = sorted(
@@ -240,76 +186,25 @@ The following segments show varying levels of purchase intent:
             formatted_segment = segment.replace("_", " ").title()
             content += f"| {formatted_segment} | {intent:.2f} |\n"
 
-        content += "\n### Key Findings\n\n"
-
         # Identify highest and lowest intent segments
         if len(sorted_insights) >= 2:
             highest_segment, highest_intent = sorted_insights[0]
             lowest_segment, lowest_intent = sorted_insights[-1]
 
-            content += f"- **Highest Intent Segment:** {highest_segment.replace('_', ' ').title()} ({highest_intent:.2f})\n"
-            content += f"- **Lowest Intent Segment:** {lowest_segment.replace('_', ' ').title()} ({lowest_intent:.2f})\n\n"
+            content += f"\n**Highest:** {highest_segment.replace('_', ' ').title()} ({highest_intent:.2f}) | "
+            content += f"**Lowest:** {lowest_segment.replace('_', ' ').title()} ({lowest_intent:.2f})\n\n"
 
         # Provide targeting recommendations
         high_segments = [seg for seg, intent in sorted_insights if intent >= 4.0]
         if high_segments:
-            content += "**Recommended Target Segments:** "
+            content += "**Target Segments:** "
             content += ", ".join(seg.replace("_", " ").title() for seg in high_segments)
             content += "\n\n"
     else:
         content += "*No demographic insights available.*\n\n"
 
+    content += "---\n\n"
     return content
-
-
-def _generate_methodology() -> str:
-    """Generate the methodology section."""
-    return """---
-
-## Methodology
-
-This evaluation uses LLM-simulated personas with diverse demographic attributes:
-- **Age ranges:** 18-70 years
-- **Income levels:** Low, Medium, High
-- **Education levels:** High School through PhD
-- **Locations:** Urban, Suburban, Rural
-
-### Semantic Similarity Rating Approach
-
-Purchase intent ratings are calculated using a probability-weighted semantic similarity method based on the research paper methodology:
-
-1. Each persona provides textual purchase intent (not numeric)
-2. Text is vectorized using Nomic embeddings
-3. Cosine similarities are calculated against 5 golden intent anchors
-   - Each anchor represents one rating level (1-5)
-   - Each anchor is computed as the average embedding of 5 variations covering different reasoning patterns:
-     * Need-based reasoning (do I need it?)
-     * Fit-based reasoning (is it right for me?)
-     * Price-based reasoning (is it worth the cost?)
-     * Feature-based reasoning (does it have what I want?)
-     * Interest-based reasoning (does it appeal to me?)
-4. Similarities are transformed into a probability mass function (PMF):
-   - Subtract minimum similarity to shift range
-   - Normalize to create a probability distribution over the 5 rating levels
-5. Final rating is computed as the expected value (weighted sum of ratings × probabilities)
-
-**Mean PMF Calculation:** The mean PMF shown in the report is calculated by averaging the individual PMFs from each persona. This provides insight into the overall distribution of purchase intent across the population, showing which rating levels are most probable on average.
-
-This approach reduces bias and produces more human-like rating distributions, as described in the paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings".
-
-### Rating Scale (5-point continuous)
-
-- **1.0** - Definitely would NOT purchase
-- **2.0** - Probably would NOT purchase
-- **3.0** - Neutral / might or might not purchase
-- **4.0** - Probably would purchase
-- **5.0** - Definitely would purchase
-
-Ratings are continuous values (e.g., 3.6) providing nuanced insights.
-
----
-
-"""
 
 
 def _generate_recommendations(metrics: "DemandMetrics") -> str:
@@ -351,18 +246,14 @@ def _generate_recommendations(metrics: "DemandMetrics") -> str:
 
 def _generate_next_steps() -> str:
     """Generate the next steps section."""
-    return """
----
+    return """## Next Steps
 
-## Next Steps
-
-1. **Validate Results:** Consider pilot testing with real users from high-intent segments
-2. **Deep Dive Analysis:** Review individual persona evaluations for qualitative insights
-3. **Competitive Analysis:** Compare against alternative products in the market
-4. **Market Positioning:** Refine value proposition based on high-intent segment feedback
-5. **Marketing Messages:** Extract common themes from high-intent persona intent descriptions
+1. Review individual persona evaluations for qualitative insights
+2. Pilot test with real users from high-intent segments
+3. Refine value proposition based on segment feedback
+4. Compare against competitive alternatives
 
 ---
 
-*This report was generated using the WIRL Demand Evaluation Workflow, which implements methodology from the research paper "LLMs Reproduce Human Purchase Intent via Semantic Similarity Elicitation of Likert Ratings"*
+*Generated by WIRL Demand Evaluation Workflow*
 """

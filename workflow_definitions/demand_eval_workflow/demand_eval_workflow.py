@@ -113,11 +113,11 @@ GOLDEN_INTENTS = {
         "I would probably buy it as it genuinely interests me",
     ],
     5: [
-        "I would definitely buy it as I absolutely need this right now",
-        "I would definitely buy it because it's exactly the right fit for me",
-        "I would definitely buy it as it offers excellent value for the price",
-        "I would definitely buy it as it has all the important features I need",
-        "I would definitely buy it as I'm very interested in this product",
+        "I would buy it as I need something like this",
+        "I would buy it because it's a good fit for my needs",
+        "I would buy it as it offers great value for the price",
+        "I would buy it as it has the features I'm looking for",
+        "I would buy it as I'm quite interested in this product",
     ],
 }
 
@@ -195,17 +195,12 @@ def generate_personas(num_personas: int, config: dict) -> dict:
     """
     model = config.get("model", "gemma3:12b")
     temperature = config.get("temperature", 0.8)
-    model_type = config.get("model_type", "ollama")
 
-    # Initialize LLM
-    if model_type == "openai":
-        llm = ChatOpenAI(model=model, temperature=temperature)
-    else:
-        llm = ChatOllama(
-            model=model,
-            temperature=temperature,
-            validate_model_on_init=True,
-        )
+    llm = ChatOllama(
+        model=model,
+        temperature=temperature,
+        validate_model_on_init=True,
+    )
 
     # Generate diverse personas
     personas = []
@@ -216,6 +211,7 @@ def generate_personas(num_personas: int, config: dict) -> dict:
     income_levels = ["Low", "Medium", "High"]
     education_levels = ["High School", "Bachelor's Degree", "Master's Degree", "PhD"]
     locations = ["Urban", "Suburban", "Rural"]
+    family_statuses = ["Single", "Married", "Divorced", "Widowed"]
 
     for i in range(num_personas):
         # Randomly sample demographics for diversity
@@ -225,6 +221,7 @@ def generate_personas(num_personas: int, config: dict) -> dict:
         income = random.choice(income_levels)
         education = random.choice(education_levels)
         location = random.choice(locations)
+        family_status = random.choice(family_statuses)
 
         # Use LLM to generate occupation, lifestyle, and values
         prompt = get_persona_generation_prompt(
@@ -233,6 +230,7 @@ def generate_personas(num_personas: int, config: dict) -> dict:
             income=income,
             education=education,
             location=location,
+            family_status=family_status,
         )
 
         response = llm.invoke(prompt)
