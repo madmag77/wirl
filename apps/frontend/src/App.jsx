@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   cancelWorkflow as apiCancel,
@@ -7,14 +7,26 @@ import {
   getWorkflow,
   getWorkflows,
   getWorkflowTemplates,
+  getWorkflowTriggers,
+  createWorkflowTrigger,
+  updateWorkflowTrigger,
+  deleteWorkflowTrigger,
 } from './api.js'
 import WorkflowRunDetailsModal from './WorkflowRunDetailsModal.jsx'
+import WorkflowTriggersTable from './components/WorkflowTriggersTable.jsx'
 import WorkflowRunsTable from './components/WorkflowRunsTable.jsx'
 import { POLL_INTERVAL_MS } from './constants.js'
 import { startPolling } from './timer.js'
 import { formatDateTime } from './utils/date.js'
 
 export default function App() {
+  const defaultTimezone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    } catch (error) {
+      return 'UTC'
+    }
+  }, [])
   const [workflows, setWorkflows] = useState([])
   const [pagination, setPagination] = useState({ limit: 10, offset: 0, total: 0 })
   const [workflowDetails, setWorkflowDetails] = useState({})
@@ -34,6 +46,18 @@ export default function App() {
   const [newTemplate, setNewTemplate] = useState('')
   const [newQuery, setNewQuery] = useState('')
   const [answer, setAnswer] = useState('')
+  const [triggers, setTriggers] = useState([])
+  const [showTriggerModal, setShowTriggerModal] = useState(false)
+  const [triggerForm, setTriggerForm] = useState({
+    name: '',
+    template: '',
+    cron: '0 9 * * *',
+    timezone: defaultTimezone,
+    inputs: '{}',
+    isActive: true
+  })
+  const [triggerError, setTriggerError] = useState('')
+  const [triggerSubmitting, setTriggerSubmitting] = useState(false)
 
   const workflowDetailsRef = useRef({})
   const isMountedRef = useRef(true)
@@ -113,6 +137,12 @@ export default function App() {
     [pagination.limit, pagination.offset]
   )
 
+  const refreshTriggers = useCallback(async () => {
+    const data = await getWorkflowTriggers()
+    setTriggers(data)
+    return data
+  }, [])
+
   const refreshAndSync = useCallback(
     async options => {
       const list = await refreshWorkflows(options)
@@ -169,9 +199,17 @@ export default function App() {
       setTemplates(data)
       if (data.length > 0) {
         setNewTemplate(data[0].id)
+        setTriggerForm(current => ({
+          ...current,
+          template: current.template || data[0].id
+        }))
       }
     })
   }, [])
+
+  useEffect(() => {
+    refreshTriggers()
+  }, [refreshTriggers])
 
   // Handle deep linking with thread_id query parameter
   useEffect(() => {
@@ -283,6 +321,78 @@ export default function App() {
     setShowStartModal(true)
   }
 
+  const openTriggerModal = () => {
+    const templateId = triggerForm.template || templates[0]?.id || ''
+    setTriggerForm({
+      name: '',
+      template: templateId,
+      cron: '0 9 * * *',
+      timezone: triggerForm.timezone || defaultTimezone,
+      inputs: '{}',
+      isActive: true
+    })
+    setTriggerError('')
+    setShowTriggerModal(true)
+  }
+
+  const closeTriggerModal = () => {
+    setShowTriggerModal(false)
+    setTriggerError('')
+  }
+
+  const handleTriggerFieldChange = (field, value) => {
+    setTriggerForm(current => ({
+      ...current,
+      [field]: value
+    }))
+  }
+
+  const confirmCreateTrigger = async () => {
+    if (triggerSubmitting) return
+
+    if (!triggerForm.name.trim()) {
+      setTriggerError('Trigger name is required')
+      return
+    }
+    if (!triggerForm.template) {
+      setTriggerError('Select a workflow template')
+      return
+    }
+    if (!triggerForm.cron.trim()) {
+      setTriggerError('Cron expression is required')
+      return
+    }
+
+    let parsedInputs = {}
+    if (triggerForm.inputs && triggerForm.inputs.trim().length > 0) {
+      try {
+        parsedInputs = JSON.parse(triggerForm.inputs)
+      } catch (error) {
+        setTriggerError('Inputs must be valid JSON')
+        return
+      }
+    }
+
+    setTriggerSubmitting(true)
+    setTriggerError('')
+    try {
+      await createWorkflowTrigger({
+        name: triggerForm.name.trim(),
+        template_name: triggerForm.template,
+        cron: triggerForm.cron.trim(),
+        timezone: triggerForm.timezone?.trim() || 'UTC',
+        inputs: parsedInputs,
+        is_active: triggerForm.isActive
+      })
+      setShowTriggerModal(false)
+      await refreshTriggers()
+    } catch (error) {
+      setTriggerError(error.message || 'Failed to create trigger')
+    } finally {
+      setTriggerSubmitting(false)
+    }
+  }
+
   const confirmStartWorkflow = async () => {
     setShowStartModal(false)
     const data = await apiStart(newTemplate, newQuery)
@@ -342,6 +452,36 @@ export default function App() {
       [section]: !prev[section]
     }))
   }
+
+  const toggleTrigger = useCallback(
+    async trigger => {
+      try {
+        await updateWorkflowTrigger(trigger.id, { is_active: !trigger.is_active })
+        await refreshTriggers()
+      } catch (error) {
+        console.error('Failed to toggle trigger', error)
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(`Failed to update trigger: ${error.message}`)
+        }
+      }
+    },
+    [refreshTriggers]
+  )
+
+  const removeTrigger = useCallback(
+    async trigger => {
+      try {
+        await deleteWorkflowTrigger(trigger.id)
+        await refreshTriggers()
+      } catch (error) {
+        console.error('Failed to delete trigger', error)
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(`Failed to delete trigger: ${error.message}`)
+        }
+      }
+    },
+    [refreshTriggers]
+  )
 
 
   const openDetailsModal = id => {
@@ -417,19 +557,31 @@ export default function App() {
           <h1>Workflow Runs</h1>
           <p className="subtitle">Track, inspect, and relaunch your workflows from a single view.</p>
         </div>
-        <button className="primary-btn" onClick={openStartModal}>Start New Workflow</button>
+        <div className="header-actions">
+          <button className="outline-btn" onClick={openTriggerModal}>Schedule Workflow</button>
+          <button className="primary-btn" onClick={openStartModal}>Start New Workflow</button>
+        </div>
       </header>
       <main className="app-main">
-        <WorkflowRunsTable
-          workflows={workflows}
-          workflowDetails={workflowDetails}
-          pagination={pagination}
-          onSelectRun={openDetailsModal}
-          onRetry={handleRetry}
-          onContinue={openDetailsModal}
-          onPageChange={handlePageChange}
-          formatDateTime={formatDateTime}
-        />
+        <div className="main-stack">
+          <WorkflowTriggersTable
+            triggers={triggers}
+            onCreate={openTriggerModal}
+            onToggle={toggleTrigger}
+            onDelete={removeTrigger}
+            formatDateTime={formatDateTime}
+          />
+          <WorkflowRunsTable
+            workflows={workflows}
+            workflowDetails={workflowDetails}
+            pagination={pagination}
+            onSelectRun={openDetailsModal}
+            onRetry={handleRetry}
+            onContinue={openDetailsModal}
+            onPageChange={handlePageChange}
+            formatDateTime={formatDateTime}
+          />
+        </div>
       </main>
 
       {showStartModal && (
@@ -449,6 +601,84 @@ export default function App() {
             <div className="modal-buttons">
               <button className="cancel-btn" onClick={cancelStartWorkflow}>Cancel</button>
               <button className="start-btn" onClick={confirmStartWorkflow}>Start</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTriggerModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal trigger-modal">
+            <h3>Schedule Workflow</h3>
+            <div className="form-field">
+              <label htmlFor="trigger-name">Name</label>
+              <input
+                id="trigger-name"
+                value={triggerForm.name}
+                onChange={event => handleTriggerFieldChange('name', event.target.value)}
+                placeholder="Morning digest"
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="trigger-template">Workflow Template</label>
+              <select
+                id="trigger-template"
+                value={triggerForm.template}
+                onChange={event => handleTriggerFieldChange('template', event.target.value)}
+              >
+                <option value="" disabled>Select template</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-inline">
+              <div className="form-field">
+                <label htmlFor="trigger-cron">Cron Expression</label>
+                <input
+                  id="trigger-cron"
+                  value={triggerForm.cron}
+                  onChange={event => handleTriggerFieldChange('cron', event.target.value)}
+                  placeholder="0 9 * * *"
+                />
+                <small>Use standard 5-field cron notation (minute hour day month weekday).</small>
+              </div>
+              <div className="form-field">
+                <label htmlFor="trigger-timezone">Timezone</label>
+                <input
+                  id="trigger-timezone"
+                  value={triggerForm.timezone}
+                  onChange={event => handleTriggerFieldChange('timezone', event.target.value)}
+                  placeholder="UTC"
+                />
+              </div>
+            </div>
+            <div className="form-field">
+              <label htmlFor="trigger-inputs">Inputs (JSON)</label>
+              <textarea
+                id="trigger-inputs"
+                rows={4}
+                value={triggerForm.inputs}
+                onChange={event => handleTriggerFieldChange('inputs', event.target.value)}
+                placeholder={`{
+  "days_back": 1
+}`}
+              />
+            </div>
+            <label className="switch-field">
+              <input
+                type="checkbox"
+                checked={triggerForm.isActive}
+                onChange={event => handleTriggerFieldChange('isActive', event.target.checked)}
+              />
+              <span>Activate immediately</span>
+            </label>
+            {triggerError && <p className="form-error">{triggerError}</p>}
+            <div className="modal-buttons">
+              <button className="cancel-btn" onClick={closeTriggerModal} disabled={triggerSubmitting}>Cancel</button>
+              <button className="start-btn" onClick={confirmCreateTrigger} disabled={triggerSubmitting}>
+                {triggerSubmitting ? 'Saving…' : 'Save Trigger'}
+              </button>
             </div>
           </div>
         </div>

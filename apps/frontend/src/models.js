@@ -39,3 +39,16 @@
  * @property {string} name
  * @property {string} path
  */
+
+/**
+ * @typedef {Object} WorkflowTrigger
+ * @property {string} id
+ * @property {string} name
+ * @property {string} template_name
+ * @property {string} cron
+ * @property {string} timezone
+ * @property {boolean} is_active
+ * @property {string} [next_run_at]
+ * @property {string} [last_run_at]
+ * @property {string} [last_error]
+ */

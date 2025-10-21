@@ -56,6 +56,28 @@ body {
   font-size: 0.95rem;
 }
 
+.header-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.outline-btn {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 999px;
+  padding: 0.75rem 1.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.outline-btn:hover {
+  background-color: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 8px 18px -12px rgba(37, 99, 235, 0.3);
+}
+
 .primary-btn {
   background-color: var(--primary-color);
   color: #fff;
@@ -85,6 +107,15 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  overflow-y: auto;
+}
+
+.main-stack {
+  width: 100%;
+  max-width: 1100px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
 .table-card {
@@ -95,6 +126,25 @@ body {
   box-shadow: 0 20px 45px -30px var(--shadow-color);
   border: 1px solid var(--border-color);
   overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 1.75rem 1rem;
+}
+
+.card-titles h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.card-description {
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .workflow-table {
@@ -181,9 +231,90 @@ body {
   border-color: #cbd5e1;
 }
 
+.status-active {
+  background-color: #dcfce7;
+  color: #047857;
+  border-color: #10b981;
+}
+
+.status-paused {
+  background-color: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
 .monospace {
   font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.85rem;
+}
+
+.timezone-tag {
+  display: inline-flex;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--hover-color);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.trigger-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.table-action-btn {
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background-color: #f8fafc;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.table-action-btn:hover {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.table-action-danger {
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.table-action-danger:hover {
+  background-color: var(--error-color);
+  color: #fff;
+}
+
+.trigger-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.error-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.12);
+  color: var(--error-color);
+  font-size: 0.8rem;
+}
+
+.status-subtle {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.trigger-name {
+  font-weight: 600;
 }
 
 .inputs-preview,
@@ -292,13 +423,75 @@ body {
   gap: 1rem;
 }
 
+.trigger-modal {
+  width: 100%;
+  max-width: 520px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .start-modal select,
-.start-modal input {
+.start-modal input,
+.trigger-modal select,
+.trigger-modal input,
+.trigger-modal textarea {
   width: 100%;
   padding: 0.75rem 0.9rem;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   font-size: 0.95rem;
+}
+
+.trigger-modal textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-field label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.form-field small {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.form-inline {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-inline .form-field {
+  flex: 1 1 240px;
+}
+
+.switch-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.switch-field input {
+  width: 18px;
+  height: 18px;
+}
+
+.form-error {
+  color: var(--error-color);
+  font-size: 0.9rem;
 }
 
 .modal-buttons {
