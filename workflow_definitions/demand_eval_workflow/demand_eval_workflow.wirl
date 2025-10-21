@@ -1,0 +1,153 @@
+workflow DemandEvalWorkflow {
+
+  metadata {
+    description: "Evaluate product demand using LLM-simulated personas with diverse demographics"
+    owner: "assistant"
+    version: "1.0"
+  }
+
+  inputs {
+    String product_name
+    String product_description
+    Int num_personas
+    String report_path
+  }
+
+  outputs {
+    Object<DemandMetrics> metrics = AnalyzeDemand.metrics
+    List<Object<PersonaEvaluation>> evaluations = EvaluationLoop.evaluations
+  }
+
+  node GeneratePersonas {
+    call generate_personas
+    inputs {
+      Int num_personas = num_personas
+    }
+    const {
+      model: "gpt-oss:20b"
+    }
+    outputs {
+      List<Object<Persona>> personas
+    }
+  }
+
+  node CalculateGoldenEmbeddings {
+    call calculate_golden_embeddings
+    inputs {
+      Int num_personas = num_personas
+    }
+    const {
+      embedding_model: "embeddinggemma"
+    }
+    outputs {
+      List<List<Float>> golden_embeddings
+    }
+  }
+
+  cycle EvaluationLoop {
+    inputs {
+      List<Object<Persona>> initial_personas = GeneratePersonas.personas
+      List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas
+      String product_name = product_name
+      String product_description = product_description
+      List<List<Float>> golden_embeddings = CalculateGoldenEmbeddings.golden_embeddings
+    }
+    outputs {
+      List<Object<PersonaEvaluation>> evaluations = CollectEvaluations.evaluations
+    }
+
+    node ProcessNextPersona {
+      call process_next_persona
+      inputs {
+        List<Object<Persona>> personas = EvaluationLoop.remaining_personas?
+        List<Object<Persona>> initial_personas = EvaluationLoop.initial_personas
+      }
+      outputs {
+        Object<Persona> current_persona
+        List<Object<Persona>> remaining_personas
+        Bool no_personas_left
+      }
+    }
+
+    node GetPurchaseIntent {
+      call get_purchase_intent
+      inputs {
+        Object<Persona> persona = ProcessNextPersona.current_persona
+        String product_name = EvaluationLoop.product_name
+        String product_description = EvaluationLoop.product_description
+      }
+      const {
+        model: "gpt-oss:20b"
+      }
+      outputs {
+        String intent_text
+      }
+    }
+
+    node CalculatePersonaMetrics {
+      call calculate_persona_metrics
+      inputs {
+        Object<Persona> persona = ProcessNextPersona.current_persona
+        String intent_text = GetPurchaseIntent.intent_text
+        List<List<Float>> golden_embeddings = EvaluationLoop.golden_embeddings
+      }
+      const {
+        embedding_model: "embeddinggemma"
+      }
+      outputs {
+        Object<PersonaEvaluation> evaluation
+      }
+    }
+
+    node CollectEvaluations {
+      call collect_evaluations
+      inputs {
+        Object<PersonaEvaluation> evaluation = CalculatePersonaMetrics.evaluation?
+        List<Object<Persona>> remaining_personas = ProcessNextPersona.remaining_personas?
+        Bool no_personas_left = ProcessNextPersona.no_personas_left?
+      }
+      when {
+        ProcessNextPersona.no_personas_left or CalculatePersonaMetrics.evaluation
+      }
+      outputs {
+        Bool is_done
+        (append) List<Object<PersonaEvaluation>> evaluations
+      }
+    }
+
+    guard {
+      inputs {
+        Bool is_done = CollectEvaluations.is_done
+      }
+      when {
+        CollectEvaluations.is_done
+      }
+    }
+    max_iterations: 100
+  }
+
+  node AnalyzeDemand {
+    call analyze_demand
+    inputs {
+      List<Object<PersonaEvaluation>> evaluations = EvaluationLoop.evaluations
+      String product_name = product_name
+    }
+    outputs {
+      Object<DemandMetrics> metrics
+    }
+  }
+
+  node SaveReport {
+    call save_report
+    inputs {
+      String product_name = product_name
+      String product_description = product_description
+      Int num_personas = num_personas
+      Object<DemandMetrics> metrics = AnalyzeDemand.metrics
+      String report_path = report_path
+    }
+    outputs {
+      Object<DemandMetrics> final_metrics
+    }
+  }
+}
