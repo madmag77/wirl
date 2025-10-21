@@ -5,11 +5,11 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from croniter import croniter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from zoneinfo import ZoneInfo
 
 from backend.database import SessionLocal
 from backend.models import WorkflowRun, WorkflowStatus, WorkflowTrigger
@@ -148,4 +148,3 @@ def initialize_trigger_schedule(session: Session, trigger: WorkflowTrigger) -> N
         logger.warning("Trigger %s disabled due to invalid schedule: %s", trigger.id, exc)
 
     session.add(trigger)
-

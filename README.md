@@ -76,6 +76,33 @@ To run the apps automatically after reboot:
 scripts/mac-install-launchctl
 ```
 
+#### Viewing launchctl logs
+
+When running via launchctl, logs are stored in `~/.local/log/`:
+
+```bash
+# View live output logs
+tail -f ~/.local/log/wirl-workflows-overmind.out
+
+# View live error logs
+tail -f ~/.local/log/wirl-workflows-overmind.err
+
+# View both logs simultaneously
+tail -f ~/.local/log/wirl-workflows-overmind.{out,err}
+
+# Check service status
+launchctl list | grep com.local.wirl.overmind
+
+# Connect to individual processes via Overmind
+overmind connect backend -s ~/.overmind.sock
+overmind connect workers -s ~/.overmind.sock
+# Detach with: Ctrl-b, then d
+
+# Restart the service
+launchctl unload ~/Library/LaunchAgents/com.local.wirl.overmind.plist
+launchctl load ~/Library/LaunchAgents/com.local.wirl.overmind.plist
+```
+
 ### Schedule runs (optional)
 
 WIRL now ships with a **built-in cron-style scheduler** so you can run workflows on a cadence without deploying extra services:
