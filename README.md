@@ -107,8 +107,8 @@ launchctl load ~/Library/LaunchAgents/com.local.wirl.overmind.plist
 
 WIRL now ships with a **built-in cron-style scheduler** so you can run workflows on a cadence without deploying extra services:
 
-1. Open the frontend and go to **Triggers** (icon in the top navigation).
-2. Click **New Trigger** to define a name, pick a workflow template, provide JSON inputs, and enter a cron expression + timezone.
+1. You can find Scheduled Triggers panel on the main page above the workflow runs history.
+2. Click **Schedule Workflow** to define a name, pick a workflow template, provide JSON inputs, and enter a cron expression + timezone.
 3. Toggle the trigger on. The backend persists it to Postgres and shows the next run time.
 
 The FastAPI backend hosts a lightweight scheduler that polls the `workflow_triggers` table and enqueues runs whenever a trigger is due. The worker service picks up the queued run just like any manual execution, so no additional infrastructure is required. You can pause/resume triggers from the UI; invalid templates or cron expressions automatically disable the trigger and surface the error message inline.
