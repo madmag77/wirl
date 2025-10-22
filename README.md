@@ -113,6 +113,8 @@ WIRL now ships with a **built-in cron-style scheduler** so you can run workflows
 
 The FastAPI backend hosts a lightweight scheduler that polls the `workflow_triggers` table and enqueues runs whenever a trigger is due. The worker service picks up the queued run just like any manual execution, so no additional infrastructure is required. You can pause/resume triggers from the UI; invalid templates or cron expressions automatically disable the trigger and surface the error message inline.
 
+![Schedule a task](images/schedule.png?raw=true "Schedule a task")
+
 If you prefer external schedulers, you can still wire GitHub Actions (see `infra/github_actions_document_sort.yaml`) or any other job runner against the public API.
 
 ## UI at a glance
