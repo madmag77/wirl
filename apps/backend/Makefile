@@ -34,7 +34,7 @@ run:
 	cd $(ROOT) && $(PY) -m uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT)
 
 test:
-	$(PY) -m pytest -q tests
+	DATABASE_URL=sqlite:///:memory: $(PY) -m pytest -q tests
 
 test_cov:
-	$(PY) -m pytest -q tests --cov=backend --cov-report=term-missing
+	DATABASE_URL=sqlite:///:memory: $(PY) -m pytest -q tests --cov=backend --cov-report=term-missing
