@@ -121,10 +121,14 @@ class ScheduleRunner:
         trigger.last_run_at = now
         trigger.last_error = None
         try:
+            # Always calculate next run from NOW to skip all missed runs.
+            # This ensures that if the system was down for multiple scheduled runs,
+            # we only enqueue ONE job (the most recent missed one) and then schedule
+            # the next run in the future, rather than enqueueing all missed runs.
             trigger.next_run_at = calculate_next_run(
                 trigger.cron,
                 trigger.timezone,
-                from_time=trigger.next_run_at or now,
+                from_time=now,
             )
         except Exception as exc:
             trigger.next_run_at = None

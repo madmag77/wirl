@@ -125,12 +125,15 @@ get_telegram_chat_id:
 .PHONY: test test-python-packages test-workflows
 
 # Run all tests (Python packages, workflows, and frontend)
-test: test-python-packages test-all-workflows
+test: test-python-packages test-all-workflows test-backend
 	@echo "All tests completed"
 
 # Python package tests (ensures dev deps like pytest are installed)
 test-python-packages:
 	$(MAKE) -C $(ROOT)/packages/wirl-pregel-runner test PY=$(PY)
+
+test-backend:
+	DATABASE_URL=sqlite:///:memory: $(MAKE) -C $(ROOT)/apps/backend test PY=$(PY)
 
 # Alias for clarity (reuses existing target)
 test-workflows: test-all-workflows
