@@ -108,26 +108,6 @@ class ScheduleRunner:
             logger.warning("Disabling trigger %s because template is missing", trigger.id)
             return
 
-        # Check if we've missed multiple scheduled runs
-        missed_multiple = False
-        if trigger.next_run_at:
-            try:
-                # Calculate what the next run after the missed one would be
-                next_after_missed = calculate_next_run(
-                    trigger.cron,
-                    trigger.timezone,
-                    from_time=trigger.next_run_at,
-                )
-                # If that's also in the past, we've missed multiple runs
-                if next_after_missed <= now:
-                    missed_multiple = True
-                    logger.info(
-                        "Trigger %s has missed multiple scheduled runs. " "Running only the most recent one and skipping ahead.",
-                        trigger.id,
-                    )
-            except Exception:
-                pass  # If calculation fails, treat as single miss
-
         run_id = str(uuid.uuid4())
         run = WorkflowRun(
             id=run_id,
@@ -141,21 +121,15 @@ class ScheduleRunner:
         trigger.last_run_at = now
         trigger.last_error = None
         try:
-            # If we've missed multiple runs, calculate next run from current time
-            # to skip ahead and avoid running all the missed jobs sequentially
-            if missed_multiple:
-                trigger.next_run_at = calculate_next_run(
-                    trigger.cron,
-                    trigger.timezone,
-                    from_time=now,
-                )
-            else:
-                # Normal case: calculate next run from the scheduled time
-                trigger.next_run_at = calculate_next_run(
-                    trigger.cron,
-                    trigger.timezone,
-                    from_time=trigger.next_run_at or now,
-                )
+            # Always calculate next run from NOW to skip all missed runs.
+            # This ensures that if the system was down for multiple scheduled runs,
+            # we only enqueue ONE job (the most recent missed one) and then schedule
+            # the next run in the future, rather than enqueueing all missed runs.
+            trigger.next_run_at = calculate_next_run(
+                trigger.cron,
+                trigger.timezone,
+                from_time=now,
+            )
         except Exception as exc:
             trigger.next_run_at = None
             trigger.is_active = False

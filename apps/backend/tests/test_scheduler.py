@@ -233,34 +233,6 @@ class TestScheduleRunnerMultipleMissedRuns:
         time_difference = abs((next_run_tz_aware - expected_next).total_seconds())
         assert time_difference < 3600 * 24  # Within a day
 
-    def test_multiple_missed_runs_logs_message(self, test_db: Session, mock_template, caplog):
-        """Test that skipping multiple runs logs an informative message."""
-        scheduler = ScheduleRunner()
-
-        # Create a trigger that missed multiple runs
-        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        missed_run_time = now - timedelta(days=3)
-
-        trigger = WorkflowTrigger(
-            id="test-trigger-4",
-            name="Test Trigger",
-            template_name="test_workflow",
-            cron="0 12 * * *",  # Every day at noon
-            timezone="UTC",
-            inputs={},
-            is_active=True,
-            next_run_at=missed_run_time,
-        )
-        test_db.add(trigger)
-        test_db.commit()
-
-        # Process triggers with logging
-        with caplog.at_level("INFO"):
-            scheduler._process_triggers()
-
-        # Check that the log message was generated
-        assert any("missed multiple scheduled runs" in record.message.lower() for record in caplog.records), "Should log a message about missing multiple runs"
-
     def test_prevents_cascade_of_old_jobs(self, test_db: Session, mock_template):
         """Test that old jobs don't cascade by processing each day sequentially."""
         scheduler = ScheduleRunner()
