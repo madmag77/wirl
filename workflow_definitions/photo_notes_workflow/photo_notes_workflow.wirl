@@ -58,7 +58,7 @@ workflow PhotoNotesWorkflow {
         T<Image> image = ReadPhoto.image
       }
       const {
-        model: "gemma3:12b"
+        model: "gemma3:27b"
         base_url: "http://localhost:11434/v1/"
         temperature: 0
       }
