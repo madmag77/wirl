@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    macOS LaunchAgent configuration for WIRL Overmind service
+
+    This plist will be processed by scripts/macos/mac-install-launchctl.sh, which:
+    - Replaces {USERNAME}, {PATH TO REPO}, {PATH TO HOME FOLDER} placeholders
+    - Adds DATABASE_URL and WORKFLOW_DEFINITIONS_PATH from .env file if present
+    - Installs to ~/Library/LaunchAgents/
+
+    Key features:
+    - Auto-cleans stale .overmind.sock files before starting (prevents "already running" errors)
+    - KeepAlive=true ensures automatic restart after crashes
+    - Logs to ~/.local/log/wirl-workflows-overmind.{out,err}
+-->
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -7,12 +20,10 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/overmind</string>
-        <string>start</string>
-        <string>-f</string>
-        <string>procfile</string>
-        <string>-s</string>
-        <string>{PATH TO REPO}/.overmind.sock</string>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <!-- Clean stale socket file before starting to prevent "overmind already running" errors -->
+        <string>rm -f {PATH TO REPO}/.overmind.sock &amp;&amp; /opt/homebrew/bin/overmind start -f procfile -s {PATH TO REPO}/.overmind.sock</string>
     </array>
 
     <key>UserName</key>

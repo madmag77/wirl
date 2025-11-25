@@ -89,6 +89,34 @@ generate_plist() {
     # Create LaunchAgents directory if it doesn't exist
     mkdir -p "$LAUNCHAGENTS_DIR"
 
+    # Load environment variables from .env if it exists
+    ENV_FILE="$REPO_ROOT/.env"
+    DATABASE_URL=""
+    WORKFLOW_DEFINITIONS_PATH=""
+
+    if [ -f "$ENV_FILE" ]; then
+        print_status "Loading environment variables from .env file..."
+        # Source the .env file safely
+        while IFS='=' read -r key value; do
+            # Skip comments and empty lines
+            [[ "$key" =~ ^#.*$ ]] && continue
+            [[ -z "$key" ]] && continue
+
+            # Remove leading/trailing whitespace and quotes
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+
+            if [ "$key" = "DATABASE_URL" ]; then
+                DATABASE_URL="$value"
+            elif [ "$key" = "WORKFLOW_DEFINITIONS_PATH" ]; then
+                WORKFLOW_DEFINITIONS_PATH="$value"
+            fi
+        done < "$ENV_FILE"
+    else
+        print_warning ".env file not found at $ENV_FILE"
+        print_warning "You may need to manually add DATABASE_URL and WORKFLOW_DEFINITIONS_PATH to the plist"
+    fi
+
     # Replace placeholders in template
     sed -e "s|{USERNAME}|$CURRENT_USER|g" \
         -e "s|{PATH TO REPO}|$REPO_ROOT|g" \
@@ -96,6 +124,32 @@ generate_plist() {
         -e "s|/opt/homebrew/bin/overmind|$OVERMIND_PATH|g" \
         -e "s|/Users/username/wirl|$REPO_ROOT|g" \
         "$PLIST_TEMPLATE" > "$PLIST_FILE"
+
+    # Add environment variables if they were found
+    if [ -n "$DATABASE_URL" ] || [ -n "$WORKFLOW_DEFINITIONS_PATH" ]; then
+        print_status "Adding environment variables to plist..."
+
+        # Use Python to safely add environment variables to the plist
+        python3 << EOF
+import plistlib
+with open('$PLIST_FILE', 'rb') as f:
+    plist = plistlib.load(f)
+
+if 'EnvironmentVariables' not in plist:
+    plist['EnvironmentVariables'] = {}
+
+if '$DATABASE_URL':
+    plist['EnvironmentVariables']['DATABASE_URL'] = '$DATABASE_URL'
+    print('  Added DATABASE_URL')
+
+if '$WORKFLOW_DEFINITIONS_PATH':
+    plist['EnvironmentVariables']['WORKFLOW_DEFINITIONS_PATH'] = '$WORKFLOW_DEFINITIONS_PATH'
+    print('  Added WORKFLOW_DEFINITIONS_PATH')
+
+with open('$PLIST_FILE', 'wb') as f:
+    plistlib.dump(plist, f)
+EOF
+    fi
 
     # Create log directory
     mkdir -p "$HOME/.local/log"
@@ -107,11 +161,23 @@ generate_plist() {
 install_and_load_service() {
     print_status "Installing and loading the service..."
 
+    # Clean up stale socket file before loading
+    SOCKET_PATH="$REPO_ROOT/.overmind.sock"
+    if [ -S "$SOCKET_PATH" ]; then
+        print_status "Removing stale socket file..."
+        rm -f "$SOCKET_PATH"
+    fi
+
     # Unload existing service if it exists
     if launchctl list | grep -q "$SERVICE_NAME"; then
         print_status "Unloading existing service..."
         launchctl unload "$PLIST_FILE" 2>/dev/null || true
+        # Wait a moment for the service to fully unload
+        sleep 1
     fi
+
+    # Clean up socket file again after unload
+    rm -f "$SOCKET_PATH"
 
     # Load the new service
     print_status "Loading service: $SERVICE_NAME"
@@ -176,11 +242,36 @@ show_debug_info() {
     echo "  Current user: $(whoami)"
     echo ""
     print_status "To debug issues:"
-    echo "  1. Check service status: launchctl list | grep $SERVICE_NAME"
-    echo "  2. View logs: tail -f $HOME/.local/log/wirl-workflows-overmind.out"
-    echo "  3. View errors: tail -f $HOME/.local/log/wirl-workflows-overmind.err"
-    echo "  4. Restart service: launchctl unload '$PLIST_FILE' && launchctl load '$PLIST_FILE'"
-    echo "  5. Check overmind manually: cd '$REPO_ROOT' && overmind start"
+    echo "  1. Check service status:"
+    echo "     launchctl list | grep $SERVICE_NAME"
+    echo "     # Output: PID  EXIT_CODE  SERVICE_NAME"
+    echo "     # PID '-' means not running, EXIT_CODE 1+ means error"
+    echo ""
+    echo "  2. Get detailed service info:"
+    echo "     launchctl print gui/\$(id -u)/$SERVICE_NAME"
+    echo ""
+    echo "  3. View error logs (most useful):"
+    echo "     tail -50 $HOME/.local/log/wirl-workflows-overmind.err"
+    echo ""
+    echo "  4. View output logs:"
+    echo "     tail -50 $HOME/.local/log/wirl-workflows-overmind.out"
+    echo ""
+    echo "  5. Follow logs in real-time:"
+    echo "     tail -f $HOME/.local/log/wirl-workflows-overmind.{out,err}"
+    echo ""
+    echo "  6. Restart service:"
+    echo "     launchctl unload '$PLIST_FILE' && launchctl load '$PLIST_FILE'"
+    echo ""
+    echo "  7. Clean stale socket and retry:"
+    echo "     rm -f $REPO_ROOT/.overmind.sock"
+    echo ""
+    echo "  8. Test overmind manually:"
+    echo "     cd '$REPO_ROOT' && overmind start"
+    echo ""
+    print_status "Common issues:"
+    echo "  - 'Overmind is already running' error: Stale socket file (fixed in template)"
+    echo "  - Missing DATABASE_URL/WORKFLOW_DEFINITIONS_PATH: Create .env file in repo root"
+    echo "  - High runs count in launchctl print: Service is crash-looping, check error logs"
 }
 
 # Function to show usage

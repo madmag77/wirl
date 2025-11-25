@@ -11,7 +11,7 @@ dotenv.load_dotenv()
 from workers.db import claim_job, run_wirl, set_state  # noqa: E402
 
 CONCURRENCY = int(os.getenv("WORKERS", 4))
-TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT_MINUTES", 20)) * 60  # Convert minutes to seconds
+TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT_MINUTES", 30)) * 60  # Convert minutes to seconds
 
 logger = logging.getLogger(__name__)
 
