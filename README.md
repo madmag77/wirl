@@ -73,7 +73,7 @@ With the apps running you can **start, continue, retry**, and provide **HITL inp
 To run the apps automatically after reboot:
 
 ```bash
-scripts/mac-install-launchctl
+scripts/macos/mac-install-launchctl.sh
 ```
 
 #### Viewing launchctl logs
@@ -102,6 +102,146 @@ overmind connect workers -s ~/.overmind.sock
 launchctl unload ~/Library/LaunchAgents/com.local.wirl.overmind.plist
 launchctl load ~/Library/LaunchAgents/com.local.wirl.overmind.plist
 ```
+
+#### Troubleshooting launchctl services on macOS
+
+**Note:** The install script (`scripts/macos/mac-install-launchctl.sh`) now automatically:
+- Loads `DATABASE_URL` and `WORKFLOW_DEFINITIONS_PATH` from `.env` file and adds them to the plist
+- Cleans up stale socket files before starting the service
+- Provides detailed debugging output after installation
+
+If the WIRL services aren't running properly via launchctl, use these debugging commands:
+
+**Check if services are running:**
+```bash
+# List all WIRL-related services
+launchctl list | grep -i wirl
+
+# Output format: PID  EXIT_CODE  SERVICE_NAME
+# - PID: Process ID if running, "-" if not running
+# - EXIT_CODE: 0 = success, 1+ = error
+# Example output:
+#   -       1       com.local.wirl.overmind  <- Service crashed (exit code 1)
+#   2309    0       com.apple.container...   <- Service running (PID 2309)
+```
+
+**Get detailed service status:**
+```bash
+# Detailed info about the service
+launchctl print gui/$(id -u)/com.local.wirl.overmind
+
+# Shows: state, runs count, last exit code, log paths, environment variables
+```
+
+**Check recent logs:**
+```bash
+# View last 50 lines of error log (most useful for debugging)
+tail -50 ~/.local/log/wirl-workflows-overmind.err
+
+# View last 50 lines of output log
+tail -50 ~/.local/log/wirl-workflows-overmind.out
+
+# Follow logs in real-time
+tail -f ~/.local/log/wirl-workflows-overmind.{out,err}
+```
+
+**Common issues and solutions:**
+
+1. **Stale socket file (service exits with code 1):**
+   - **Symptom:** Error log shows "it looks like Overmind is already running"
+   - **Solution:** The plist template now auto-cleans stale socket files. If you installed before this fix, manually remove:
+   ```bash
+   rm -f ~/path/to/wirl/.overmind.sock
+   # Service will auto-restart after cleanup
+   ```
+   - **Note:** If you modified the plist template before this fix, reinstall with:
+   ```bash
+   scripts/macos/mac-install-launchctl.sh
+   ```
+
+2. **Missing environment variables:**
+   - **Symptom:** Backend or workers crash immediately after starting
+   - **Cause:** Required environment variables (`DATABASE_URL`, `WORKFLOW_DEFINITIONS_PATH`) are not set
+   - **Solution:**
+     1. Create a `.env` file in the repo root with required variables:
+     ```bash
+     DATABASE_URL=postgresql://postgres:postgres@localhost:5432/workflows
+     WORKFLOW_DEFINITIONS_PATH=/absolute/path/to/wirl/workflow_definitions
+     ```
+     2. Reinstall the service (it will automatically pick up the `.env` file):
+     ```bash
+     scripts/macos/mac-install-launchctl.sh
+     ```
+     3. Verify environment variables were added:
+     ```bash
+     launchctl print gui/$(id -u)/com.local.wirl.overmind | grep -A 20 "environment ="
+     ```
+
+3. **Service not loaded at all:**
+   - **Symptom:** `launchctl list | grep wirl` returns nothing
+   - **Solution:** Reinstall the service:
+   ```bash
+   scripts/macos/mac-install-launchctl.sh
+   ```
+
+4. **Service continuously restarting (high runs count):**
+   - **Symptom:** `launchctl print` shows "runs = 49+" with exit code 1
+   - **Solution:** Check error logs to identify the root cause:
+   ```bash
+   tail -100 ~/.local/log/wirl-workflows-overmind.err
+   ```
+
+5. **All services exit immediately after starting:**
+   - **Symptom:** Output log shows services starting then immediately "Interrupting..." and "Exited with code 0"
+   - **Cause:** Procfile contains a short-lived process that exits immediately (e.g., a command that just checks status and exits)
+   - **Solution:** All processes in the procfile must be long-running. If you need initialization, combine it with a long-running command:
+   ```bash
+   # Bad: exits immediately
+   container: sh -c 'container system start'
+
+   # Good: initialization followed by long-running command
+   postgres: sh -c 'container system start; container start postgres; container logs -f postgres'
+   ```
+   - **Why:** Overmind interprets any process exit as a signal to shut down all services. Keep processes alive with `-f` flags, `tail -f`, `sleep infinity`, or similar.
+
+**Check running services (once overmind is up):**
+```bash
+# Check status of all services managed by overmind
+overmind status -s /path/to/repo/.overmind.sock
+
+# Example output:
+# PROCESS   PID       STATUS
+# postgres  11639     running
+# backend   11640     running
+# workers   11641     running
+# frontend  11642     running
+
+# Connect to a specific service (to see its live output)
+overmind connect workers -s /path/to/repo/.overmind.sock
+# Press Ctrl-b then d to detach
+```
+
+**Manual service control:**
+```bash
+# Unload (stop) the service
+launchctl unload ~/Library/LaunchAgents/com.local.wirl.overmind.plist
+
+# Load (start) the service
+launchctl load ~/Library/LaunchAgents/com.local.wirl.overmind.plist
+
+# Or use the bootstrap/bootout commands (newer macOS)
+launchctl bootout gui/$(id -u)/com.local.wirl.overmind
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.local.wirl.overmind.plist
+```
+
+**Verify overmind works manually:**
+```bash
+cd ~/path/to/wirl
+overmind start  # Should start all services without errors
+# Press Ctrl-C to stop when testing
+```
+
+If overmind works manually but fails via launchctl, the issue is likely environment-related (PATH, env vars, working directory).
 
 ### Schedule runs (optional)
 
