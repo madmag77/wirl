@@ -49,7 +49,7 @@ def _eval_condition(expr: str, state: Dict[str, Any]) -> bool:
 
     # Create a safe evaluation namespace with state values
     safe_globals = {"__builtins__": {}}
-    safe_locals = {}
+    safe_locals = {"true": True, "false": False, "null": None}
 
     # Add state values to the evaluation namespace
     for key, value in state.items():
@@ -206,7 +206,18 @@ def make_pregel_task(node: NodeClass, fn_map: Dict[str, Any]):
             raise RuntimeError(error_msg) from e
         if node.hitl:
             user_answer = interrupt({"request": json.dumps(inputs)})
-            update_with_node_name[node.name + "." + node.outputs[0].name] = user_answer
+            if isinstance(user_answer, dict) and len(node.outputs) > 1:
+                # Try to map dict keys to output names
+                mapped = False
+                for out in node.outputs:
+                    if out.name in user_answer:
+                        update_with_node_name[node.name + "." + out.name] = user_answer[out.name]
+                        mapped = True
+                if not mapped:
+                    # Fallback if no keys match
+                    update_with_node_name[node.name + "." + node.outputs[0].name] = user_answer
+            else:
+                update_with_node_name[node.name + "." + node.outputs[0].name] = user_answer
         return update_with_node_name
 
     return task
